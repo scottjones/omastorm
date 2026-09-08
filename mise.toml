@@ -1,0 +1,57 @@
+# Repo prerequisites and the jobs. `mise install` gets the tools; `mise run`
+# lists the jobs. Quickshell, Qt Shader Tools, socat, ImageMagick, and ffmpeg
+# are desktop packages outside mise; `mise run setup` checks for them.
+
+[tools]
+rust = { version = "1.98", profile = "minimal", components = "rustfmt,clippy" }
+shellcheck = "0.11"
+jq = "1.8"
+ripgrep = "15"
+gh = "2"
+
+[tasks.setup]
+description = "Desktop package check, fixture download, cargo fetch, debug build"
+run = "bash scripts/setup.sh"
+
+[tasks.build]
+description = "Debug engine"
+run = "cargo build --offline --locked"
+
+[tasks.format]
+description = "rustfmt, writing"
+run = "cargo fmt"
+
+[tasks.lint]
+description = "rustfmt check, clippy with warnings denied, shellcheck"
+run = [
+  "cargo fmt --check",
+  "cargo clippy --offline --locked --all-targets -- -D warnings",
+  "shellcheck -x run.sh scripts/*.sh",
+]
+
+[tasks.run]
+description = "Launch the window against the shared debug daemon (needs GPU Quickshell)"
+run = "bash run.sh"
+
+[tasks.stop]
+description = "End the shared debug daemon"
+run = "target/debug/omastorm-engine stop"
+
+[tasks.test]
+description = "Rust unit and socket tests"
+run = "cargo test --offline --locked"
+
+[tasks.check]
+description = "Integration suite against a scratch daemon; run before every commit (--gpu adds the rendering test)"
+run = "bash scripts/check.sh"
+
+[tasks.release]
+description = "Native release binary and SHA256SUMS under target/dist/; never publishes (--write-pin updates engine/release.pin)"
+run = "bash scripts/build-engine-release.sh"
+
+[tasks.clean]
+description = "Remove Cargo output and scratch runtime dirs"
+run = [
+  "cargo clean",
+  "rm -rf /tmp/omastorm-check.* /tmp/omastorm-theme.*",
+]

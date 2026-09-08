@@ -140,12 +140,12 @@ Code: MIT, see [LICENSE](LICENSE).
 
 ## Developing
 
-A checkout needs Rust 1.89+ and Quickshell with OpenGL. See
-[AGENTS.md](AGENTS.md), [engine/README.md](engine/README.md), and
-[data/README.md](data/README.md).
+A checkout needs [mise](https://mise.jdx.dev) for the toolchain and Quickshell
+with OpenGL. See [AGENTS.md](AGENTS.md), [engine/README.md](engine/README.md),
+and [data/README.md](data/README.md).
 
 ```sh
-bash scripts/setup-fixture.sh
-bash scripts/cargo.sh build --locked
-bash run.sh
+mise install
+mise run setup
+mise run run
 ```

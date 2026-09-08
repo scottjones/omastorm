@@ -1,18 +1,17 @@
 # Engine
 
-From a fresh checkout, run `bash scripts/setup-fixture.sh` once to download
-the Natural Earth files the binary embeds and the archived Level II volume the
-tests and `OMASTORM_ARCHIVE` read (`data/raw/`
-is ignored; `build.rs` stops with a message naming the script when one is
-missing), then explicitly fetch/build dependencies with `bash scripts/cargo.sh
-build --locked`. Run `bash run.sh` thereafter; launch builds offline, ensures a
-shared daemon exists, and starts Quickshell. Rust 1.89+ is required for a
-checkout build. Plugin installs use `scripts/install-engine.sh` and the pin
-in `engine/release.pin` instead of Rust; `bash scripts/build-engine-release.sh`
-produces the x86_64 asset under `target/dist/` and does not publish it
-(the pinned release holds the current file).
-`scripts/cargo.sh` uses Cargo on PATH or, if present, an isolated
-`.tools/{cargo,rustup}` toolchain. No Python runs at launch.
+From a fresh checkout, `mise install` gets the pinned Rust toolchain and
+`mise run setup` downloads the Natural Earth files the binary embeds and the
+archived Level II volume the tests and `OMASTORM_ARCHIVE` read (`data/raw/`
+is ignored; `build.rs` stops with a message naming `scripts/setup-fixture.sh`
+when one is missing), fetches crates, and builds the debug engine. Run
+`mise run run` thereafter; launch builds offline, ensures a shared daemon
+exists, and starts Quickshell. Rust 1.89 is the minimum; `mise.toml` pins the
+version a checkout uses. Plugin installs use `scripts/install-engine.sh` and
+the pin in `engine/release.pin` instead of Rust; `mise run release` produces
+the x86_64 asset under `target/dist/` and does not publish it (the pinned
+release holds the current file). `scripts/cargo.sh` uses Cargo on PATH, which
+mise provides. No Python runs at launch.
 
 The engine embeds `data/fixture.json` and `data/sites.json` and nothing
 archived. `fixture.json` is the frame template (product, palette, bounds,
@@ -219,10 +218,10 @@ Source URL, date, and caveats are embedded and exposed with hello.
 Checks (socket and GPU checks need desktop access outside the sandbox):
 
 ```sh
-bash scripts/cargo.sh test --offline --locked
+mise run test                                # unit and socket tests
+mise run lint                                # rustfmt check, clippy, shellcheck
+mise run check                               # everything below plus the other UI checks, against a scratch daemon
 bash scripts/cargo.sh test --offline --locked -- --ignored rendering   # GPU, needs Quickshell
-bash scripts/cargo.sh clippy --offline --locked --all-targets -- -D warnings
-bash scripts/cargo.sh fmt --check
 bash scripts/check-engine-ui.sh
 bash scripts/check-map-tiles.sh              # delayed zoom tiles and ranked labels
 bash scripts/check-map-sites.sh              # site overlay geometry, layout, and pan

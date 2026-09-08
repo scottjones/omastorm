@@ -33,26 +33,32 @@ not start the step after it in the same session.
 
 ## Run and verify
 
+`mise.toml` declares the tools (Rust, shellcheck, jq, ripgrep, gh) and the
+jobs. `mise install` once, then `mise run` lists them:
+
 ```sh
-bash scripts/setup-fixture.sh                # once per fresh checkout: geography to embed, archived volume for tests
-bash run.sh                                  # launch (needs GPU Quickshell); starts lean, goes live on the home station
-OMASTORM_ARCHIVE=data/raw/KTLX20130520_201643_V06.gz bash run.sh   # start on the archived scan instead (offline)
-OMASTORM_STYLE=STIPPLE bash run.sh           # PIXELS | GLYPHS | STIPPLE
-target/debug/omastorm-engine stop            # end the shared daemon by hand (a launch replaces a stale build itself)
-bash scripts/check.sh                        # the regression suite against a scratch daemon (~1 min); --gpu adds the rendering test
-bash scripts/cargo.sh test --offline --locked -- --ignored rendering   # GPU pixel check on its own
+mise run setup                               # once per fresh checkout: desktop package check, fixture download, cargo fetch, debug build
+mise run run                                 # launch (needs GPU Quickshell); starts lean, goes live on the home station
+OMASTORM_ARCHIVE=data/raw/KTLX20130520_201643_V06.gz mise run run   # start on the archived scan instead (offline)
+OMASTORM_STYLE=STIPPLE mise run run          # PIXELS | GLYPHS | STIPPLE
+mise run stop                                # end the shared daemon by hand (a launch replaces a stale build itself)
+mise run lint                                # rustfmt check, clippy, shellcheck
+mise run test                                # Rust unit and socket tests
+mise run check                               # the integration suite against a scratch daemon (~1 min); --gpu adds the rendering test
+mise run release                             # native release binary under target/dist/; never publishes
 bash scripts/capture-review.sh               # offscreen captures to review/ (ImageMagick; ignored output)
 omarchy plugin validate .                    # the manifest check the shell and the marketplace apply
 ```
 
-Install and launch need Rust and Quickshell only.
+Install and launch for users need Quickshell only; the engine arrives as a
+pinned release asset. Only a checkout needs mise.
 
 The rendering test and the captures need a working desktop OpenGL
 context (offscreen platform, RHI OpenGL). A sandbox without a GPU cannot run
 them; say so in the handoff rather than skipping silently. The software Qt
 Quick backend is unsupported by design.
 
-Run `bash scripts/check.sh` before every commit; it never touches the shared
+Run `mise run check` before every commit; it never touches the shared
 daemon. After any shader, sampling, or camera change, add `--gpu` for the
 ignored rendering test (`engine/tests/rendering.rs`, described in
 `engine/README.md`) and run the capture review; the test replays the shader's
@@ -64,9 +70,10 @@ with `bash scripts/build-shader.sh` whenever `ui/shaders/radar.frag` or
 
 - Arch Linux with Omarchy. Quickshell 0.3.1. Nothing in install, launch, or
   the checks uses Python.
-- Rust is a checkout-local toolchain under `.tools/` (ignored), not a system
-  install. Always go through `bash scripts/cargo.sh ...`; bare `cargo` is not on
-  PATH.
+- Rust comes from mise (`mise.toml` pins the version), not a system install.
+  Bare `cargo` is on PATH only inside `mise run` or `mise exec`; the scripts
+  go through `bash scripts/cargo.sh ...`, which finds it either way. An older
+  checkout-local toolchain under `.tools/` (ignored) is no longer used.
 - Go is installed but is not used by this project.
 - Omarchy theme files: `~/.local/state/omarchy/current/theme/{colors,shell}.toml`
   (a real directory, not a symlink). Theme-change hooks run from

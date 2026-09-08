@@ -33,3 +33,6 @@ data/derived/
 # Site media, cut from docs/media by the commands in site/README.md
 site/take.mp4
 site/take-poster.png
+
+# mise per-machine overrides
+mise.local.toml
