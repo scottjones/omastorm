@@ -1,11 +1,11 @@
 # Omastorm
 
-Live NEXRAD radar for the Omarchy desktop. Beta.
+Open-source, live NEXRAD radar for the Omarchy desktop. Beta.
 
 [![Omastorm, one live take on the Jacksonville radar](https://github.com/wesleygrimes/omastorm/releases/download/v0.1.0/omastorm-preview.gif)](https://github.com/wesleygrimes/omastorm/releases/download/v0.1.0/omastorm-demo.mp4)
 
-One live take, 2026-09-07, on KJAX: the loop, pan and zoom, the three
-treatments, weak returns, the picker, and the keys.
+Live KJAX demo: playback, pan and zoom, treatments, weak returns, station
+search, and keyboard controls.
 
 A radar that lives in your bar. The popover shows the station nearest you with
 the actual scan time. Expand it for the full window: every NEXRAD site in the
@@ -15,6 +15,10 @@ in your Omarchy theme.
 ![The Omastorm window, live](https://github.com/wesleygrimes/omastorm/releases/download/v0.1.0/window-live.png)
 
 ![The Omastorm popover, live](https://github.com/wesleygrimes/omastorm/releases/download/v0.1.0/popover.png)
+
+A headless Rust engine fetches and decodes NEXRAD Level II data and prepares
+GPU-ready radar textures. An Omarchy plugin built with Quickshell/QML is the
+client: it displays those textures in the bar popover and full window.
 
 ## Features
 
@@ -156,17 +160,10 @@ OpenStreetMap contributors, [ODbL](https://opendatacommons.org/licenses/odbl/1-0
 tiles by [OpenFreeMap](https://openfreemap.org); Natural Earth, public domain.
 Code: MIT, see [LICENSE](LICENSE).
 
-## Developing
+## Contributing
 
-A checkout needs [mise](https://mise.jdx.dev) for the toolchain, plus the
-desktop packages `quickshell` (with OpenGL), `qt6-shadertools`, and `socat`;
-`mise setup` names any that are missing. See [AGENTS.md](AGENTS.md) for the
-jobs and conventions, [engine/README.md](engine/README.md) for the engine, and
-[data/README.md](data/README.md) for the fixture data.
-
-```sh
-mise install    # the pinned toolchain
-mise setup      # fixture download, cargo fetch, debug build
-mise start      # launch the window
-mise check      # the regression suite; run before every commit
-```
+Start with [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, checks, and the
+pull request workflow. [DESIGN.md](DESIGN.md) defines the app's visual and
+interaction rules; the [engine guide](engine/README.md) and
+[wire protocol](docs/protocol.md) explain the backend/client boundary.
+Maintainers can follow the [release guide](docs/RELEASING.md).

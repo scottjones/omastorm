@@ -1,7 +1,6 @@
 # Engine to UI protocol
 
-Version 1. Defined 2026-09-05 for milestone 2. The engine (`omastorm-engine`,
-Rust) is the server. The Quickshell UI is a thin client. Radar values never
+Version 1. The Rust engine (`omastorm-engine`) is the server. The Quickshell UI is a thin client. Radar values never
 travel over this protocol; they go to the GPU as texture files.
 
 ## Transport
@@ -55,8 +54,8 @@ It is small (a few KB) so clients replace rather than merge.
 - `connection.status`: `ok` | `stale` | `unavailable` | `offline` | `loading`.
   `ageSeconds` is the age of the newest complete frame (0 while there is
   none). `connection` is the only place a lasting error condition lives; it
-  describes the engine's data path and no client command can clear it. Live
-  (phase 4): `loading` from a `select_site` until the station's first sweep
+  describes the engine's data path and no client command can clear it. In live
+  mode, the status is `loading` from a `select_site` until the station's first sweep
   arrives or the poller reports; then, with the feed reachable, the status
   follows the age of the newest radial the station has published (the sweep
   in progress while one paints, else the newest complete frame): `ok` under
@@ -68,7 +67,7 @@ It is small (a few KB) so clients replace rather than merge.
   once a second and broadcasts when anything changed, so `ageSeconds` and
   the status move on a quiet feed. A `message` is added if a status ever
   needs words.
-- `timeline` (phase 4) is every frame a client can `seek` to, oldest first:
+- `timeline` is every frame a client can `seek` to, oldest first:
   the station's complete frames from its catalog (the newest 60) and, while a
   sweep is painting, that sweep as the last entry with `status` `partial`
   (`complete` otherwise). `frame` is one of them. The engine owns the
@@ -102,7 +101,7 @@ It is small (a few KB) so clients replace rather than merge.
   `palette.length` × 1 texture and labels the legend from `bounds` (first band
   `<bounds[1]`, last band `bounds[n-1]+`), so any band count works and radar
   and legend share one source of color.
-- `frame.scale` and `frame.offset` (phase 5) are the moment's own encoding:
+- `frame.scale` and `frame.offset` are the moment's own encoding:
   value = (code − offset) / scale in `units`. The UI uses them to place the
   weak-return floor, a view setting in `units`, in code units for the shader
   (lookup rule, below). Both are 0 on the loading placeholder, which
@@ -121,8 +120,7 @@ map sends on its own does not count as the user's next command.
  "message":"Unknown site XXXX; stations are listed in hello."}
 ```
 
-`tile_ready` (phase 3; decided 2026-09-06, DESIGN.md basemap tiles) answers
-one `tiles_needed` request, tile by tile, to the client that sent it. Like
+`tile_ready` answers one `tiles_needed` request, tile by tile, to the client that sent it. Like
 `error` it is a reply, not shared state. A tile already rendered this session
 is answered at once; one the engine cannot produce is not answered, and the
 lasting condition shows in `state.basemap.osm.status`. `set` says which data
@@ -147,7 +145,7 @@ when `osm` becomes available. `labels` are the tile's places for the overlay.
   `scalerank`). An `ne` tile carries the Natural Earth places inside it whose
   `min_zoom` is at most `z + 1`, since a 512 px tile shows the ground of four
   256 px tiles one level deeper.
-- `state.basemap` (phase 3) describes the tile sources:
+- `state.basemap` describes the tile sources:
   `{"ne":{"version":"5.2.0-pre"},"osm":{"status":"ok","source":"OpenFreeMap",
   "version":"20260830_080001_pt","attribution":"OpenFreeMap © OpenMapTiles Data from OpenStreetMap"}}`.
   `osm.status` is `ok`, `offline` (fetching fails; cached tiles still serve),
@@ -170,7 +168,7 @@ when `osm` becomes available. `labels` are the tile's places for the overlay.
 {"type":"tiles_needed","z":11,"x0":469,"y0":807,"x1":472,"y1":810}
 ```
 
-- `select_site` (phase 4) names a station from `hello.sites`. The engine goes
+- `select_site` names a station from `hello.sites`. The engine goes
   live on it: the newest frame in its catalog (the per-station ring buffer) or
   the loading placeholder shows at once with `connection.status` `loading`,
   and a poller replaces the previous station's; the same station again changes
@@ -188,6 +186,8 @@ when `osm` becomes available. `labels` are the tile's places for the overlay.
   the centre is the user's. A latitude outside ±90 or a longitude outside
   ±180 is answered with an `error`. `lock` and `follow` are shared flags;
   releasing the lock hands off on the next settle, not at once.
+- `set_product` requests a product and elevation. An unsupported selection
+  returns an `error` to its sender and retains the current frame.
 - `step` moves `delta` entries along `timeline` from the frame shown, stopping
   at the ends; `seek` shows the entry with `id`. Both stop playback. A stepped
   frame's textures are republished under new `tex/` paths with the frame's
@@ -195,11 +195,11 @@ when `osm` becomes available. `labels` are the tile's places for the overlay.
   and a move that lands where it already is changes nothing. `play` starts
   the loop when the timeline holds at least two complete frames (otherwise
   nothing changes); `pause` stops it and leaves the frame shown.
-- `tiles_needed` (phase 3) is the visible inclusive rectangle at one zoom, at
+- `tiles_needed` is the visible inclusive rectangle at one zoom, at
   most 64 tiles, sent when the viewport settles; it names no set (the engine
   chooses, see `tile_ready`). The engine serves it centre-out, and a newer
   request from the same client supersedes its pending tiles outside the new
-  rectangle. `set_product` is phase 3 as well. Unknown commands are ignored and
+  rectangle. Unknown commands are ignored and
   logged. A known command with a missing or mistyped field, or one asking for
   something this build cannot serve, is answered with an `error` event to its
   sender only. `state` is broadcast only when a command changed something, so
@@ -218,7 +218,7 @@ radials leave a gap (a live sweep still being filled, a dropout), one blank
 row (R, G, B zero) follows the radials and `rays` counts it; the azimuth
 lookup names it for every entry farther than 0.75° from any radial, so
 unscanned azimuths draw nothing instead of the nearest radial smeared around
-the circle (phase 4). A complete 0.5° or 1° cut needs no blank row.
+the circle. A complete 0.5° or 1° cut needs no blank row.
 
 | Channel | Meaning |
 | --- | --- |
@@ -236,7 +236,8 @@ within 0.75°; R and G hold the row index as a little-endian 16-bit value.
 becomes a site-relative ground distance and an azimuth clockwise from north:
 the cell's centre goes from Web Mercator to longitude and latitude and then,
 on a sphere of radius 6,371 km, to the great-circle distance and initial
-bearing from the site (phase 3; DESIGN.md, map frame). Ground distance converts to slant range on the 4/3 effective-radius earth,
+bearing from the site. Ground distance converts to slant range on the
+4/3 effective-radius earth,
 `r = R sin(s/R) / cos(elevationDeg + s/R)`, the inverse of pyart's
 `antenna_to_cartesian`, so gates land where the golden reference places them.
 The nearest gate is `round((r - firstGateM) / gateSpacingM)`; more than half a
@@ -244,14 +245,13 @@ gate before the first or past the last draws nothing. The azimuth's entry gives
 the row, and the sweep is sampled at `(gate + 0.5) / gates, (row + 0.5) / rays`.
 `rays`, `gates`, `firstGateM`, `gateSpacingM`, and `elevationDeg` travel as
 shader uniforms; they are geometry, not radar values.
-The weak-return floor (phase 5; DESIGN.md, weak-return floor) is the one view
-setting the shader applies to values: `weakBelow`, a code threshold the UI
+The weak-return floor is the one view setting the shader applies to values: `weakBelow`, a code threshold the UI
 derives from `frame.scale` and `frame.offset` for the floor in `units`
 (`ceil(floor × scale + offset)`), and a measured code (2 and up) below it
 draws nothing, exactly as a blank cell does; 0 is no floor. Folded and
 below-threshold codes are never weak, and the legend names the hidden range.
 
-**Tiles (phase 3):** `$XDG_RUNTIME_DIR/omastorm/tiles/<set>/<z>/<x>/<y>-<gen>.png`,
+**Tiles:** `$XDG_RUNTIME_DIR/omastorm/tiles/<set>/<z>/<x>/<y>-<gen>.png`,
 Web Mercator XYZ numbering, 512 px, RGBA antialiased masks tinted by the
 UI's shader (`ui/shaders/tile.frag`):
 
@@ -263,8 +263,8 @@ UI's shader (`ui/shaders/tile.frag`):
 | A | 255 − major-road coverage |
 
 A is inverted because Qt Quick premultiplies an image by its alpha on upload,
-so a texel with A = 0 loses R, G, and B (probed 2026-09-06; DESIGN.md,
-basemap tiles). An empty tile is therefore fully opaque, and the UI shader
+so a texel with A = 0 loses R, G, and B. An empty tile is therefore fully
+opaque, and the UI shader
 recovers the straight channels by dividing by A and reads major roads as
 1 − A. An `ne` tile has B zero and A 255 everywhere, since roads exist only
 in `osm` data. Sets: `ne` (Natural Earth, embedded in the binary, any zoom) and
@@ -272,12 +272,12 @@ in `osm` data. Sets: `ne` (Natural Earth, embedded in the binary, any zoom) and
 only here). Masks are rasterized on demand into the runtime directory, never
 modified, and dropped oldest-first past 4,096 files. The fetched vector tiles,
 not the masks, are what persists: `$XDG_CACHE_HOME/omastorm/vt/<source>/<version>/<z>/<x>/<y>.pbf`,
-512 MB ceiling, least-recently-read evicted (DESIGN.md, basemap tiles).
+512 MB ceiling, least-recently-read evicted.
 
-## Golden files (phase 2)
+## Golden files
 
-Committed under `golden/<fixture>/`, produced once per fixture with pyart on
-2026-09-05 and consumed by Rust decoder tests. pyart is not part of the project;
+Committed under `golden/<fixture>/`, produced with pyart and consumed by Rust
+decoder tests. pyart is not part of the project;
 `sweep0.json` records the exact pyart calls and version used so a future fixture
 can be produced the same way.
 
@@ -297,7 +297,7 @@ Current fixture `ktlx-20130520`: 720 × 1832, first gate 2125 m, 250 m spacing,
 195,199 measured gates, no range-folded gates. The Rust decoder test
 (`engine/src/sweep.rs`) matches every byte, angle, and ray time exactly.
 
-## Live frames (phase 4)
+## Live frames
 
 A live frame is the lowest cut (elevation number 1) of the current volume of
 the selected station, reflectivity, assembled from the real-time chunk bucket
@@ -323,7 +323,7 @@ reporting are in [configuration.md](configuration.md).
 
 ## Implementation notes
 
-Plugin clients (phase 5): wire protocol v1 is unchanged. The shell session
+The shell session
 keeps a status connection; each visible popover and expanded window has its
 own connection so tile requests remain independent. Expand uses the shared
 station, frame, and play state directly, sending no select/seek/play commands.
@@ -337,10 +337,5 @@ identify an existing build and preserve the station snapshot's provenance.
 The 163-site snapshot includes archived/test sites, not an availability list.
 `frame.site` retains the scan's measured coordinates.
 
-The daemon starts with no station and no frame to draw. Any table station
-can be selected live, and its catalogued frames are the timeline; an unsupported product selection still answers the sender
-with an `error` event while retaining the frame. Follow/lock flags are
-shared, and `view_center` hands off under them. `ageSeconds` is actual age at
-snapshot time, re-judged once a second while live.
 On disconnect the UI hides radar and retries; on an unknown version it
 hides radar and latches the error until relaunch.

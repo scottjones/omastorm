@@ -1,7 +1,5 @@
 # Omastorm branding
 
-Status 2026-09-06: **the mark is chosen, provisionally.** Typography is open.
-
 ![The omastorm mark](mark.png)
 
 ## The mark
@@ -15,7 +13,7 @@ A miniature of the app view, framed like the window:
   Glyphs density treatment the app uses (100 / 78 / 44 / 22 % from core to
   fringe) in the app's reflectivity colors: red, yellow, green, teal.
 
-Colors were sampled from the running app in the warm dark theme. Ground
+App-colored exports use the warm dark palette: ground
 `#2d2626`, foreground `#e7d6d3`, accent coral `#f18b6d`. The one-color versions
 carry the storm as opacity steps only, so they inherit any theme foreground.
 
@@ -39,27 +37,6 @@ crosshair and density steps do not survive that size.
 
 ## Lockup
 
-In the app header the mark replaces the diamond glyph before `OMASTORM`, at
+The app header places the mark before `OMASTORM`, at
 16 px beside 14 px letter-spaced JetBrains Mono, as shown on the sheet. No
 wordmark font has been chosen; the sheet uses the app's UI font.
-
-## Decisions that shaped it
-
-- The mark should look like the product, not like a generic radar or a mascot.
-  Rings, crosshair, dashed nominal ring, and stipple storms are all things the
-  real view draws. Photo-realistic or arcade storm shapes were rejected.
-- Storm placement follows real motion: squall lines lie southwest to northeast
-  and move east or southeast. Random placement read as random.
-- Not RadarScope. No hook echo on a circular scope; the square frame, pixel
-  rings, and density storm keep this its own thing.
-- Rings must be visible at icon size. The app's 30 % ring opacity vanishes
-  below 64 px, so the mark uses 50 %.
-- Ring weights and storm shape variations were tried (tapered line, bow echo,
-  compact cell, heavier inner or outer ring, three rings). The plain version was
-  kept for now.
-
-## Next
-
-1. Live with the mark in the header and as the launcher icon for a while.
-2. Choose a wordmark font and verify its license, or keep the UI font.
-3. If the mark survives, cut a 24 px grid for tray sizes between 16 and 32.

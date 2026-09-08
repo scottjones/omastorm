@@ -39,7 +39,7 @@ zoom_in = "+ ="
 - `treatment`: the treatment at launch and whenever the file changes; the
   keys and the chip change it afterwards without writing the file.
   `OMASTORM_STYLE`, set by the capture scripts, outranks it.
-- `weak_floor`: the weak-return floor (DESIGN.md, weak-return floor) at
+- `weak_floor`: the weak-return floor at
   launch and whenever the file changes: a number in the product's units, or
   `false` to draw every measured return; 5 when omitted. The `weak` key
   toggles between off and this floor afterwards without writing the file.

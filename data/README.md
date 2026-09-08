@@ -40,30 +40,8 @@ reference upstream master; if upstream changes, checksum verification stops
 rather than silently changing the fixture. Installing and launching the plugin
 needs none of this; only a checkout build does.
 
-Rebuild the shader package with `bash scripts/build-shader.sh` (Qt Shader Tools
-qsb; the precompiled `.qsb` files are committed).
+## Decoder and rendering contract
 
-## Radar data path
-
-The engine decodes the volume's lowest sweep itself (`engine/src/sweep.rs`)
-and its tests match the pyart answer key byte for byte. No Cartesian grid is
-built: each 3 px screen cell samples one polar gate, identically for all
-treatments, with nearest sampling and no mipmaps. Pixels fill the cell; glyphs
-use four fixed density masks (░▒▓█ vocabulary), and stipple varies centered
-square coverage. Both dim the palette; the measured values and palette class
-remain unchanged.
-
-Codes 0 (below threshold) and 1 (range folded) are kept apart from measured
-values, including negative and zero dBZ; the fixture holds no folded gates.
-Below threshold and outside coverage are blank, folded cells draw a two-tone
-X, and measured values below zero use the first blue-gray legend band.
-
-Palette bins have lower bounds −32, 0, 10, 20, 30, 40, 45, 50, 55, 60, 65,
-70 dBZ. Each labeled swatch is a bin, not a linear spatial scale. The palette
-stays fixed across desktop themes.
-
-Radar rendering is checked by `engine/tests/rendering.rs`, an ignored Rust test
-that renders the map through Quickshell offscreen and compares every pixel with
-the shader's rule replayed over the golden codes (see `engine/README.md`). The
-radar shader requires an accelerated Qt Quick backend; software-only rendering
-reports an explicit error.
+The [wire protocol](../docs/protocol.md#texture-files) defines radar codes,
+palette lookup, and sampling; the [engine guide](../engine/README.md#verification)
+explains verification against the golden files.

@@ -35,8 +35,8 @@ Redeploy after any change:
 npx wrangler pages deploy site --project-name omastorm --branch main
 ```
 
-Wrangler is logged in with an OAuth token holding Pages write and zone read.
-DNS changes need the Cloudflare MCP server or the dashboard.
+Deployment requires Wrangler authentication with Pages write access. Manage
+DNS through the Cloudflare connector or dashboard.
 
 Review a change without deploying:
 

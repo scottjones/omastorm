@@ -23,11 +23,9 @@ time and is not a latency measurement.
 - `omastorm-preview.gif`: the home view and the zoom, cut from the video.
 - `window-live.png`, `popover.png`: live KTLX with the actual scan time.
 
-Publish with `gh release upload v0.1.0 --clobber docs/media/*` and keep the
-README URLs pointing at that tag. `v0.1.0` predates the repo's immutable
-releases setting (2026-09-08), so its assets still accept a re-upload; a
-release made after that locks its assets at publish, so media for a new tag
-has to be uploaded while the release is still a draft.
+Upload only the generated media files with `gh release upload <tag> <files...>`
+and point the README URLs at that tag. For immutable releases, upload media
+while the release is still a draft; published assets cannot be replaced.
 
 Radar: NOAA NEXRAD. Map: © OpenStreetMap contributors
 ([ODbL](https://opendatacommons.org/licenses/odbl/1-0/)); Natural Earth, public
