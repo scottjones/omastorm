@@ -47,7 +47,7 @@ mise lint                                    # rustfmt check, clippy, shellcheck
 mise test                                    # Rust unit and socket tests
 mise check                                   # the integration suite against a scratch daemon (~1 min); --gpu adds the rendering test
 mise build-release                           # optimized, stripped engine under target/dist/ as a release candidate; publishes nothing
-mise release                                 # from a clean main: publish engine-<version> as an immutable GitHub Release and write the pin (--dry-run first)
+mise release                                 # publish engine-<version> from a clean main and write the pin; steps in engine/README.md, "Cutting an engine release"
 bash scripts/capture-review.sh               # offscreen captures to review/ (ImageMagick; ignored output)
 omarchy plugin validate .                    # the manifest check the shell and the marketplace apply
 ```

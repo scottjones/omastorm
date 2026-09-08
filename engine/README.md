@@ -333,3 +333,35 @@ The UI check verifies socket metadata, invalid JSON, a rejection that sits
 beside state until the client's next command (including one answered by the
 real daemon), the azimuth lookup and tile path rules, a `tiles_needed` round
 trip, and rejecting an unknown protocol version.
+
+## Cutting an engine release
+
+Releases on the repository are immutable: once published, the tag and the
+assets cannot be changed or deleted, and a mistake burns that version number.
+`mise release` does every step below except the version bump and the final
+commit, and refuses to start unless the preconditions hold.
+
+1. Bump `version` in `engine/Cargo.toml`. Run `mise build` so `Cargo.lock`
+   follows, then commit both and push to `main`. The release names the commit
+   everyone has, so `main` must be clean and even with `origin/main`.
+2. `mise release --dry-run`. This builds the optimized, stripped candidate
+   under `target/dist/`, starts it under a scratch runtime, and requires its
+   hello to report the new version and the protocol version `ui/Engine.qml`
+   accepts. It prints the tag, the sha256, and the release notes (the commits
+   since the pinned release that touch `engine/src`, `build.rs`, `tests`,
+   `engine/Cargo.toml`, or `Cargo.lock`), then stops.
+3. `mise release`. Same checks, then it asks. On yes it creates
+   `engine-<version>` as a draft with the binary and `SHA256SUMS`, publishes
+   it, fetches the published asset back from GitHub, and requires it to hash
+   to the candidate. Only then does it write `engine/release.pin`. `--yes`
+   skips the prompt.
+4. `mise check`. The install step installs from the new pin for real and
+   checks the published binary's hash, protocol, and version.
+5. Commit the pin bump (`engine/release.pin` is the only change) and push.
+   Users receive the new engine on their next `omarchy plugin update`.
+
+If the script refuses, the message names the precondition: wrong branch,
+dirty tree, behind or ahead of origin, a version already pinned, tagged, or
+released, or a lock file that disagrees with `Cargo.toml`. If the published
+asset does not hash to the candidate, the pin is not written; bump the version
+and publish again rather than trying to repair the release.
