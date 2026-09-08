@@ -10,6 +10,7 @@ fail() { printf '%s\n' "$@" >&2; exit 1; }
 bind='o.bind("SUPER + SHIFT + R", "Omastorm", "omarchy shell shell toggle com.omastorm.radar '"'"'{}'"'"'")'
 rg -F -- "$bind" README.md >/dev/null \
   || fail "README.md does not name the documented o.bind line"
+# shellcheck disable=SC2088 # the literal path as the README prints it
 rg -F -- '~/.config/hypr/bindings.lua' README.md >/dev/null \
   || fail 'README.md does not name ~/.config/hypr/bindings.lua'
 rg -F -- 'omarchy plugin add https://github.com/wesleygrimes/omastorm --enable' README.md >/dev/null \

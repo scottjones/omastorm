@@ -10,7 +10,7 @@ die() { printf '%s\n' "$@" >&2; exit 1; }
 
 pin_file=${OMASTORM_ENGINE_PIN:-engine/release.pin}
 [[ -f $pin_file ]] || die "Omastorm engine pin missing: $pin_file"
-tag= repo= asset= sha256=
+tag='' repo='' asset='' sha256=''
 while IFS= read -r line || [[ -n $line ]]; do
   [[ $line =~ ^[[:space:]]*(#|$) ]] && continue
   key=${line%%=*}

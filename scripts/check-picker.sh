@@ -17,10 +17,10 @@ trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
 call() { quickshell ipc --pid "$pid" call picker "$@"; }
 fail() { printf '%s\n' "$@" >&2; cat "$check_dir/log" >&2; exit 1; }
 expect() { [[ "$3" == "$2" ]] || fail "$1" "Expected: $2" "Actual:   $3"; }
-for attempt in {1..100}; do call status > /dev/null 2>&1 && break; sleep .1; done
+for _ in {1..100}; do call status > /dev/null 2>&1 && break; sleep .1; done
 call status > /dev/null || fail "The window's picker IPC never answered"
 call open ""
-for attempt in {1..50}; do [[ $(call matches) != '[]' ]] && break; sleep .1; done
+for _ in {1..50}; do [[ $(call matches) != '[]' ]] && break; sleep .1; done
 # The fixture's home view centres north-west of KTLX: KTLX first, the Norman pair next.
 m=$(call matches)
 [[ $m == '["KTLX","K'* && $m == *KOUN* && $m == *KCRI* ]] || fail "Empty query did not list the nearest stations first: $m"
@@ -51,7 +51,7 @@ expect 'Enter closes the picker' 'false' "$(call status | grep -o '"open":[a-z]*
 # The field must let go of the keyboard, or the next `/` types into it instead of reopening.
 expect 'Enter hands the keyboard back' 'false' "$(call status | grep -o '"focused":[a-z]*' | cut -d: -f2)"
 sock="$XDG_RUNTIME_DIR/omastorm/engine.sock"
-for attempt in {1..50}; do
+for _ in {1..50}; do
   site=$(timeout 2 socat -t0.2 - "UNIX-CONNECT:$sock" < /dev/null | sed -n 2p | grep -o '"site":{[^}]*}' || true)
   [[ $site == *"\"id\":\"$first\""* && $site == *'"locked":true'* ]] && break
   sleep .1

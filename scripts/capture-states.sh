@@ -57,7 +57,7 @@ daemon "$scratch/silent" env
 capture silent 75000 XDG_RUNTIME_DIR="$scratch/silent" XDG_CACHE_HOME="$scratch/cache" OMASTORM_CONFIG="$(config_for "$silent_site")"
 grep -h "^Live" "$scratch/offline/engine.log" "$scratch/silent/engine.log" | sed 's/^/  engine: /' | head -4
 pkill -f "^target/debug/omastorm-engine serve" -P $$ 2>/dev/null || true
-kill $(jobs -p) 2>/dev/null || true
+jobs -p | xargs -r kill 2>/dev/null || true
 
 # The harness shell (scripts/capture-harness.sh): the real UI files with
 # OMASTORM_STATE_OVERRIDE laid over every state.

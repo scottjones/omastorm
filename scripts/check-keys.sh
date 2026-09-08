@@ -34,10 +34,10 @@ fail() { printf '%s\n' "$@" >&2; cat "$check_dir/log" >&2; exit 1; }
 expect() { [[ "$3" == "$2" ]] || fail "$1" "Expected: $2" "Actual:   $3"; }
 less() { awk -v a="$1" -v b="$2" 'BEGIN { exit !(a + 0 < b + 0) }'; }
 until_field() { # name, wanted
-  for attempt in {1..100}; do [[ $(field "$1") == "$2" ]] && return; sleep .1; done
+  for _ in {1..100}; do [[ $(field "$1") == "$2" ]] && return; sleep .1; done
   fail "$1 never became $2: $(call status)"
 }
-for attempt in {1..100}; do call status > /dev/null 2>&1 && break; sleep .1; done
+for _ in {1..100}; do call status > /dev/null 2>&1 && break; sleep .1; done
 call status > /dev/null || fail "The window's keys IPC never answered"
 
 # The table over the defaults: the good line applies, every mistake is
@@ -95,7 +95,7 @@ quickshell ipc --pid "$pid" call picker close
 # and the header follows the file through the watch.
 shown=$(field site)
 call run home
-for attempt in {1..50}; do grep -q "^home_site = \"$shown\"$" "$check_dir/config.toml" && break; sleep .1; done
+for _ in {1..50}; do grep -q "^home_site = \"$shown\"$" "$check_dir/config.toml" && break; sleep .1; done
 grep -q "^home_site = \"$shown\"$" "$check_dir/config.toml" || fail "Shift+H did not save home_site = \"$shown\"" "$(cat "$check_dir/config.toml")"
 [[ $(grep -n "^home_site\|^\[keys\]" "$check_dir/config.toml" | head -1) == *home_site* ]] || fail "home_site landed inside a table"
 until_field homeSource config

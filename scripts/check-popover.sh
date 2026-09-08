@@ -23,7 +23,7 @@ status() { call status; }
 fail() { echo "$*" >&2; cat "$scratch/ui.log" >&2; exit 1; }
 until_status() {
   local filter=$1
-  for attempt in {1..100}; do
+  for _ in {1..100}; do
     status 2>/dev/null | jq -e "$filter" >/dev/null 2>&1 && return 0
     sleep .1
   done
@@ -46,7 +46,7 @@ until_status '.condition == "archived" and .text == "ARCHIVED"'
 call closeWindow
 call reopen
 call capture "$PWD/review/popover-archived.png"
-for attempt in {1..50}; do [[ -s review/popover-archived.png ]] && break; sleep .1; done
+for _ in {1..50}; do [[ -s review/popover-archived.png ]] && break; sleep .1; done
 sock="$XDG_RUNTIME_DIR/omastorm/engine.sock"
 tell() { printf '%s\n' "$@" | socat -t0.2 - "UNIX-CONNECT:$sock" >/dev/null; }
 # Two deterministic complete frames, using the archived fixture's metadata

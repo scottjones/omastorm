@@ -8,7 +8,7 @@
 # sampling, or camera change). The capture scripts are not here: run the
 # one whose picture the session changed.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 gpu=0
 [[ ${1:-} == --gpu ]] && gpu=1
 scratch=$(mktemp -d /tmp/omastorm-check.XXXXXX)

@@ -25,10 +25,13 @@ capture() { # name, delay ms, ipc steps...
   OMASTORM_CONFIG="$scratch/home.toml" OMASTORM_WIDTH=960 OMASTORM_HEIGHT=680 \
     OMASTORM_CAPTURE_DELAY="$delay" OMASTORM_CAPTURE="$review/picker-$name.png" bash run.sh > /dev/null 2>&1 &
   pid=$!
-  for attempt in {1..100}; do quickshell ipc --pid "$pid" call picker status > /dev/null 2>&1 && break; sleep .1; done
+  for _ in {1..100}; do quickshell ipc --pid "$pid" call picker status > /dev/null 2>&1 && break; sleep .1; done
   sleep 4 # tiles and the replayed cut
-  local step
-  for step in "$@"; do quickshell ipc --pid "$pid" call picker $step; done
+  local step words
+  for step in "$@"; do
+    read -ra words <<< "$step"
+    quickshell ipc --pid "$pid" call picker "${words[@]}"
+  done
   wait "$pid"
   [[ -s "$review/picker-$name.png" ]] || { echo "No capture for $name" >&2; exit 1; }
   echo "captured $name · engine on $(timeout 2 socat -t0.2 - "UNIX-CONNECT:$sock" < /dev/null | sed -n 2p | grep -o '"site":{"id"[^}]*}')"

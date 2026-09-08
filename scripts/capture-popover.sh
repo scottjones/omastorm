@@ -19,7 +19,7 @@ quickshell -p ui/PopoverHarness.qml > "$scratch/ui.log" 2>&1 &
 pid=$!
 call() { quickshell ipc --pid "$pid" call popover "$@"; }
 ready=0
-for attempt in {1..120}; do
+for _ in {1..120}; do
   if call status 2>/dev/null | jq -e '.site == "KTLX" and .condition == "ok" and (.frame | contains("loading") | not)' >/dev/null 2>&1; then ready=1; break; fi
   sleep .5
 done
@@ -31,7 +31,7 @@ for treatment in GLYPHS PIXELS STIPPLE; do
   path="$PWD/review/popover-${treatment,,}.png"
   rm -f "$path"
   call capture "$path"
-  for attempt in {1..50}; do [[ -s $path ]] && break; sleep .1; done
+  for _ in {1..50}; do [[ -s $path ]] && break; sleep .1; done
   [[ -s $path ]] || exit 1
 done
 call status > review/popover-state.json

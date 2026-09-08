@@ -28,7 +28,7 @@ quickshell -p "$tmp/ui/shell.qml" > "$tmp/log" 2>&1 &
 pid=$!
 expect() {
     local actual=""
-    for attempt in {1..50}; do
+    for _ in {1..50}; do
         actual=$(quickshell ipc --pid "$pid" call check snapshot 2>/dev/null) || true
         if [[ "$actual" == "$1" ]]; then return; fi
         sleep .1
