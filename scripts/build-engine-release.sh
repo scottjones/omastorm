@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Build the x86_64-unknown-linux-gnu GitHub Release asset and SHA256SUMS
-# under target/dist/. Pass --write-pin to copy the hash into engine/release.pin
+# under target/dist/ as a release candidate. It is not compared to the current
+# pin; a candidate is expected to differ from the published binary. Pass
+# --write-pin to copy its hash into engine/release.pin
 # after a successful build. Does not publish, tag, or push.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -44,10 +46,4 @@ repo=wesleygrimes/omastorm
 asset=$asset
 sha256=$sum
 PIN
-fi
-
-if [[ -f $pin ]]; then
-  expected=$(awk -F= '/^sha256=/{print $2}' "$pin")
-  [[ $sum == "$expected" ]] || die "Built $dest ($sum) does not match $pin ($expected)." \
-    "Re-run with --write-pin only when preparing a new engine release."
 fi

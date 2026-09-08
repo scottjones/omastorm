@@ -50,6 +50,10 @@ run = "bash scripts/check.sh"
 description = "Optimized, stripped engine and SHA256SUMS under target/dist/ as a release candidate; publishes nothing (--write-pin updates engine/release.pin)"
 run = "bash scripts/build-engine-release.sh"
 
+[tasks.release]
+description = "Publish engine-<version> from main: candidate, draft release, publish, verify the published asset, write the pin (--dry-run, --yes)"
+run = "bash scripts/release-engine.sh"
+
 [tasks.clean]
 description = "Remove Cargo output and scratch runtime dirs"
 run = [
