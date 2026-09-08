@@ -22,7 +22,7 @@ in your Omarchy theme.
   the antenna turns. Stale data says it is stale.
 - **Every site.** Pan the map and it follows the nearest station, or search by
   id, city, or state.
-- **Timeline.** The last 60 scans per station, cached locally. Play, step, scrub.
+- **Timeline.** Up to 60 scans per station, cached locally. Play, step, scrub.
 - **Three treatments.** Glyphs, Pixels, and Stipple sample the same gate and
   paint the cell differently.
 - **Native.** Colors, font, and spacing come from the active Omarchy theme and
@@ -71,9 +71,10 @@ frame. Closing the window returns to home.
 
 In the window, drag to pan and scroll to zoom. The map follows the nearest
 station as you pan unless you lock it. A station you arrive at fetches its last
-dozen scans, so there is a loop to play within a few seconds. The status slot shows the age of the
-frame on screen: LIVE, STALE after ten minutes, UNAVAILABLE or OFFLINE when the
-feed cannot be reached, with cached frames kept.
+dozen scans, so there is a loop to play within a few seconds; the cache then
+grows to 60 as new scans arrive. The status slot shows the age of the frame on
+screen: LIVE, STALE after ten minutes, UNAVAILABLE or OFFLINE when the feed
+cannot be reached, with cached frames kept.
 
 | Key | Action |
 | --- | --- |
@@ -98,8 +99,8 @@ are hidden by default and the legend says so; `w` shows them.
 ## Configuration
 
 `~/.config/omastorm/config.toml` is optional. Without `home_site` the home is
-the station nearest Omarchy's weather location. `Shift+H`, or the HOME
-button, saves the station on screen as `home_site`.
+the station nearest the location Omarchy's weather panel is set to. `Shift+H`,
+or the HOME button, saves the station on screen as `home_site`.
 
 ```toml
 home_site = "KTLX"   # a station id; omit to use Omarchy's weather location
@@ -113,7 +114,23 @@ zoom_in = "+ ="
 ```
 
 A bad value is named in the status slot and that setting stays on its default.
-The action names and key syntax are in [docs/protocol.md](docs/protocol.md).
+Every action name, the key syntax, and what each setting does are in
+[docs/configuration.md](docs/configuration.md).
+
+## Troubleshooting
+
+The engine runs as one shared daemon per login. Its log is
+`$XDG_RUNTIME_DIR/omastorm/engine.log` (usually `/run/user/<uid>/omastorm/`).
+If the popover says the engine could not be installed, the download or its
+sha256 check failed; the reason is in `bootstrap.log` in the same directory,
+and opening the popover again retries. To restart the engine by hand:
+
+```sh
+~/.local/share/omastorm/bin/omastorm-engine stop
+```
+
+The next popover or window starts it again. Please attach both logs to a
+[bug report](https://github.com/wesleygrimes/omastorm/issues).
 
 ## Remove
 
@@ -121,6 +138,7 @@ The action names and key syntax are in [docs/protocol.md](docs/protocol.md).
 omarchy plugin remove com.omastorm.radar
 ~/.local/share/omastorm/bin/omastorm-engine stop
 rm -rf ~/.local/share/omastorm ~/.cache/omastorm
+rm -rf ~/.config/omastorm                            # your config.toml; keep it to reinstall later
 rm -f ~/.local/share/applications/omastorm.desktop   # if you added the launcher entry
 ```
 
@@ -140,12 +158,15 @@ Code: MIT, see [LICENSE](LICENSE).
 
 ## Developing
 
-A checkout needs [mise](https://mise.jdx.dev) for the toolchain and Quickshell
-with OpenGL. See [AGENTS.md](AGENTS.md), [engine/README.md](engine/README.md),
-and [data/README.md](data/README.md).
+A checkout needs [mise](https://mise.jdx.dev) for the toolchain, plus the
+desktop packages `quickshell` (with OpenGL), `qt6-shadertools`, and `socat`;
+`mise setup` names any that are missing. See [AGENTS.md](AGENTS.md) for the
+jobs and conventions, [engine/README.md](engine/README.md) for the engine, and
+[data/README.md](data/README.md) for the fixture data.
 
 ```sh
-mise install
-mise setup
-mise start
+mise install    # the pinned toolchain
+mise setup      # fixture download, cargo fetch, debug build
+mise start      # launch the window
+mise check      # the regression suite; run before every commit
 ```
