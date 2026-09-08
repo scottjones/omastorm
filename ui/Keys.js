@@ -32,7 +32,7 @@ var ACTIONS = [
     { id: "help", keys: "?" },
     { id: "close", keys: "Escape" }
 ];
-// The sheet's two columns (DESIGN.md, phase 4 UX pass). A row of
+// The sheet's two columns (DESIGN.md). A row of
 // several actions shows each one's first key and names the alternates.
 var ROWS = [
     [{ label: "search sites", actions: ["search"] },

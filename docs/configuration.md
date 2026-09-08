@@ -1,41 +1,103 @@
 # Configuration
 
-The UI reads and watches `~/.config/omastorm/config.toml` for the home
-station, follow flag, treatment, weak-return floor, and key map. Home and
-follow settings become engine commands described in [protocol.md](protocol.md);
-treatment and the weak-return floor stay in the UI. The
-[README](../README.md#configuration) has the short version.
+## Preferences and remembered state
 
-`OMASTORM_CONFIG` names another file for checks and captures; a missing file
-is no configuration.
+The UI reads two files with different responsibilities. Explicit configuration
+wins; remembered state fills in values the user has not configured. Neither
+file contains radar frames or downloaded map data, and neither is read by the
+engine. The UI sends the commands described in [protocol.md](protocol.md).
+
+| File | Owner and purpose | Contents |
+| --- | --- | --- |
+| `~/.config/omastorm/config.toml` | User-managed, deliberate preferences | Optional fixed launch center, radar override, treatment, weak-return floor, keybindings |
+| `$XDG_DATA_HOME/omastorm/state.json` | App-managed, remembered session | Last map center, zoom, and optional radar lock chosen in the UI |
+
+When `XDG_DATA_HOME` is unset, state lives at
+`~/.local/share/omastorm/state.json`. Onboarding, panning, zooming, and UI lock
+changes write state, not config. Deleting state resets the remembered session
+without removing deliberate preferences. Missing or invalid state falls back
+to the remaining location sources; it must not prevent startup. Keep state
+small and write it atomically after movement settles or the lock changes.
+Do not store credentials, radar data, or copies of all config preferences there.
+
+## Launch and onboarding
+
+Resolve the map center from the first valid source:
+
+1. The complete configured `center_lat` / `center_lon` pair.
+2. The remembered map center in state.
+3. Omarchy's weather coordinates in
+   `~/.local/state/omarchy/settings/weather.json` (`name`, `latitude`,
+   `longitude`). File existence alone is insufficient; coordinates must be valid.
+4. The location picker: search for a place or enter latitude and longitude.
+
+A missing location opens a "Choose a location" prompt in the popover; its
+button opens the expanded window's picker. Accepting a location saves the
+view in state. Weather-derived initial coordinates are also saved in state.
+Neither route adds coordinate overrides to config. The picker remains
+available through "Choose location…" after onboarding.
+
+Resolve the radar independently: configured `locked_radar`, then a remembered
+UI lock, then the nearest station to the resolved center. A configured radar
+alone does not resolve a location. Coordinates never imply a lock. Choosing a
+location through the picker clears a remembered lock; a configured override
+still applies.
+
+Restore remembered zoom, or the default zoom when none is valid. Keep the
+camera at the resolved location when frames arrive. Close and reopen preserve
+the view, subject to config overrides. Engine reconnects preserve the active
+view. Weather changes do not reset a remembered location.
+
+## Explicit configuration
 
 ```toml
-home_site = "KJAX"   # a station id from hello.sites
-follow = true        # the map centre picks the station; omit to leave the shared flag alone
-treatment = "GLYPHS" # PIXELS, GLYPHS, or STIPPLE at launch; Glyphs when omitted
-weak_floor = 5       # dBZ; measured returns under it draw nothing; false draws them all; 5 when omitted
+# Always open centered here. Set both; omit both to remember the last position.
+center_lat = 36.23708
+center_lon = -79.97948
 
-[keys]               # Qt key sequences, several separated by spaces; "" unbinds
+# Optional: use this radar on launch regardless of map center.
+# Omit to restore the UI lock, or select automatically when no lock is remembered.
+# locked_radar = "KFCX"
+
+treatment = "GLYPHS" # PIXELS, GLYPHS, or STIPPLE at launch; Glyphs when omitted
+weak_floor = 5       # dBZ; false draws every measured return
+
+[keys]
 pan_left = "h Left"
 zoom_in = "+ ="
 ```
 
-- `home_site`: when the engine's state first arrives (and again after a
-  reconnect, since a restarted daemon starts with no station) the
-  window puts the camera on this station's home view and sends
-  `select_site`; an id outside the table shows the engine's rejection in the
-  status slot. Without it, the home is the station nearest Omarchy's own
-  location when `~/.local/state/omarchy/settings/weather.json` (`name`,
-  `latitude`, `longitude`, written by the shell's weather panel) has one,
-  selected the same way; the header says `HOME · NEAR <name>` or
-  `HOME · CONFIG.TOML` while the home station is shown. With neither, the
-  window shows whatever the daemon is on, the whole network with no station
-  at first, until a pan hands off or a station is chosen. `OMASTORM_LOCATION` names
-  another location file; when `OMASTORM_CONFIG` is set the machine's own
-  location file is not read unless `OMASTORM_LOCATION` names one, so a check
-  or capture with its own config is isolated from the desktop's settings.
-- `follow`: sent as the `follow` command at the same moments when it differs
-  from the state. An edit to the file applies to the open window at once.
+- `center_lat` / `center_lon`: finite numeric latitude in [-90, 90] and
+  longitude in [-180, 180]. Both are required together. Report an incomplete
+  or invalid pair in the status slot and fall back to the next location
+  source. Valid coordinates win over remembered center on every launch and
+  bypass the location prompt. Panning still works and updates state; reopening
+  returns to the configured center. Removing the pair resumes the remembered
+  position. Zoom remains independent.
+- `locked_radar`: a station id from `hello.sites`. Report an invalid id in
+  the status slot; do not silently substitute another locked station.
+  A valid override wins over the remembered lock on launch. It never moves
+  the map. Unlocking in the UI affects the session and remembered lock;
+  config applies again on launch. Remove this setting and unlock in the UI
+  to keep automatic selection across launches.
+
+A Jacksonville map center with `locked_radar = "KFCX"` is valid. Honor both
+settings even when the sweep is outside the view. Show the selected station
+and lock, with "Use nearest radar" and "Go to selected radar" available when
+coverage is outside the view. Never relocate the camera or discard the lock
+silently.
+
+For agent-assisted installation, write coordinate overrides only when the
+user requests a fixed launch location. Ordinary installation leaves them
+unset so weather location or onboarding establishes a remembered view.
+
+`OMASTORM_CONFIG` names another config file for checks and captures; a missing
+file is no configuration. `OMASTORM_LOCATION` names another weather file.
+When using an isolated config, checks and captures must also isolate remembered
+state and must not read the desktop's weather location unless explicitly named.
+
+## Display and keyboard preferences
+
 - `treatment`: the treatment at launch and whenever the file changes; the
   keys and the chip change it afterwards without writing the file.
   `OMASTORM_STYLE`, set by the capture scripts, outranks it.
@@ -46,7 +108,7 @@ zoom_in = "+ ="
   `OMASTORM_WEAK` (`off` or a number), set by the capture scripts, outranks
   it. Anything else is reported like a bad `treatment` and leaves the default.
 - `[keys]`: one entry per action, laid over the defaults in `ui/Keys.js`:
-  `search` (`/ s`), `nearest` (`n`), `lock` (`Shift+L`), `home` (`Shift+H`), `pan_left`
+  `search` (`/ s`), `nearest` (`n`), `lock` (`Shift+L`), `pan_left`
   `pan_down` `pan_up` `pan_right` (`h j k l` and the arrows), `zoom_in`
   (`+ =`), `zoom_out` (`-`), `reset` (`0`), `previous_frame` (`[`),
   `next_frame` (`]`), `play` (`Space`), `oldest` (`Home`), `newest` (`End`),

@@ -278,8 +278,8 @@ not the masks, are what persists: `$XDG_CACHE_HOME/omastorm/vt/<source>/<version
 
 Committed under `golden/<fixture>/`, produced with pyart and consumed by Rust
 decoder tests. pyart is not part of the project;
-`sweep0.json` records the exact pyart calls and version used so a future fixture
-can be produced the same way.
+`sweep0.json` records the exact pyart calls and version used so fixture generation
+is reproducible.
 
 - `golden/<fixture>/sweep0.json`: `rays`, `gates`, `moment`, `scale`, `offset`,
   `firstGateM`, `gateSpacingM`, `azimuthDeg[]`, `elevationDeg[]`,
@@ -316,20 +316,26 @@ paints live.
 
 ## Configuration
 
-`~/.config/omastorm/config.toml` is read and watched by the UI, never by the
-engine. Home and follow settings become `select_site` and `follow` commands;
-treatment and the weak-return floor stay in the UI. Keys, values, and error
-reporting are in [configuration.md](configuration.md).
+`~/.config/omastorm/config.toml` and
+`$XDG_DATA_HOME/omastorm/state.json` are read by the UI, never by the engine.
+Explicit preferences override remembered view state. The UI resolves the map
+center and radar lock independently, then sends `select_site`, `lock`,
+`follow`, and settled `view_center` commands as needed. Unlocked navigation
+uses follow; locked navigation preserves the selected radar. Treatment and
+the weak-return floor stay in the UI. File ownership, launch precedence,
+onboarding, and validation are in [configuration.md](configuration.md).
 
 ## Implementation notes
 
-The shell session
-keeps a status connection; each visible popover and expanded window has its
-own connection so tile requests remain independent. Expand uses the shared
-station, frame, and play state directly, sending no select/seek/play commands.
-The session applies home on startup and window close, selects only when
-necessary, and holds the last treatment in memory. Home edits apply at once.
-With no home configured or inferred, closing leaves the selected station alone.
+The shell session keeps a status connection; each visible popover and expanded
+window has its own connection so tile requests remain independent. Expand
+uses the shared station, frame, and play state directly, sending no
+select/seek/play commands, and preserves the map center and zoom. Closing
+preserves the view rather than selecting another station. The session owns
+remembered-view writes so surfaces do not overwrite one another's state.
+On launch, the UI applies explicit config over remembered state. Reconnecting
+to the engine restores the necessary selection and flags without resetting
+the active camera. A change of frame or station never re-centers the map.
 
 `hello` additionally includes `pid`, `build` (an opaque fingerprint),
 `sitesSource`, `sitesRetrieved`, and `sitesNotes`. These allow the launcher to

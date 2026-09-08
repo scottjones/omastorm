@@ -31,14 +31,14 @@ Item {
     readonly property string siteId: state ? state.site.id : ""
     readonly property string siteName: engine.site ? engine.site.name.toUpperCase() : ""
     readonly property string sourceBadge: state ? state.source.toUpperCase() : ""
-    // The timeline (DESIGN.md, phase 4 UX pass): the station's frames oldest
+    // The timeline (DESIGN.md): the station's frames oldest
     // first with the sweep in progress last; the engine owns the position.
     readonly property var frames: state ? state.timeline : []
     readonly property int frameIndex: scan ? frames.findIndex(f => f.id === scan.id) : -1
     readonly property bool newestShown: frameIndex >= 0 && frameIndex === frames.length - 1
     readonly property bool playing: state ? state.playing : false
     readonly property var newestComplete: { var done = frames.filter(f => f.status === "complete"); return done.length ? done[done.length - 1] : null; }
-    // The connection condition while live (DESIGN.md, phase 4 UX states):
+    // The connection condition while live (DESIGN.md):
     // the header's third row shows the age of the frame on screen beside
     // its time, and its status slot names the condition or the sweep in
     // progress. LIVE under ten minutes says only the age; STALE turns it
@@ -329,7 +329,7 @@ Item {
                 border.color: button.selected || button.activeFocus ? app.theme.accent : Qt.alpha(app.theme.foreground, .22)
             }
         }
-        // Glyphs on the canvas's 16 px grid (DESIGN.md, phase 4 UX pass): transport,
+        // Glyphs on the canvas's 16 px grid (DESIGN.md): transport,
         // lock, and follow, drawn rather than typed so the monospace font's
         // coverage does not decide their shape.
         component Glyph: Canvas {

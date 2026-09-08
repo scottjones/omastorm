@@ -3,8 +3,8 @@ import QtQuick.Shapes
 import Quickshell
 
 // The radar map: camera, GPU radar shader, basemap tile layer, camera-translated
-// overlay, and pointer handling. Surfaces (the window today, popover and tiles
-// later) place it, feed it state, and drive the camera through center, span,
+// overlay, and pointer handling. Surfaces place it, feed it state,
+// and drive the camera through center, span,
 // reset(), zoom(), and maxSpan. It draws no chrome and holds no station or
 // product strings; every input arrives through its properties. Tiles come and
 // go through tilesNeeded and tileReady(); the surface connects them to the
@@ -464,8 +464,7 @@ Item {
     ShaderEffect {
         id: radarEffect
         visible: map.drawable
-        // The radar alone, not the basemap: .6 under UNAVAILABLE (DESIGN.md,
-        // phase 4 UX states).
+        // The radar alone, not the basemap: .6 under UNAVAILABLE.
         opacity: map.radarOpacity
         anchors.fill: parent
         onStatusChanged: if (status === ShaderEffect.Error) map.error = "Radar GPU shader failed: " + log

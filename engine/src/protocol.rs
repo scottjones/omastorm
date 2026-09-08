@@ -20,7 +20,7 @@ pub enum Message<'a> {
 }
 
 /// One tile answering a client's `tiles_needed`, sent to that client alone
-/// (phase 3; DESIGN.md, basemap tiles). Like `Error` it is a reply, not shared
+/// (docs/protocol.md, basemap tiles). Like `Error` it is a reply, not shared
 /// state: a tile already rendered this session is answered at once.
 #[derive(Serialize)]
 pub struct TileReady<'a> {
@@ -111,7 +111,7 @@ pub struct State {
     pub site: SiteSelection,
     pub timeline: Vec<TimelineEntry>,
     pub frame: Frame,
-    /// The tile sources (phase 3; `docs/protocol.md`, `tile_ready`).
+    /// The tile sources (`docs/protocol.md`, `tile_ready`).
     pub basemap: Basemap,
     pub playing: bool,
 }
@@ -303,7 +303,7 @@ pub struct Geometry {
 #[derive(Deserialize, PartialEq, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Command {
-    /// Go live on a station from the `hello` table (phase 4): the newest
+    /// Go live on a station from the `hello` table: the newest
     /// cached frame or an empty one shows at once, and the poller follows.
     SelectSite {
         id: String,
@@ -328,7 +328,7 @@ pub enum Command {
         elevation_index: u32,
     },
     /// The visible inclusive tile rectangle at one zoom, at most 64 tiles
-    /// (phase 3). Answered tile by tile with `tile_ready` to the sender.
+    /// Answered tile by tile with `tile_ready` to the sender.
     TilesNeeded {
         z: u32,
         x0: u32,
@@ -336,7 +336,7 @@ pub enum Command {
         x1: u32,
         y1: u32,
     },
-    /// The map centre when a pan settles (phase 4): with `follow` on and
+    /// The map centre when a pan settles: with `follow` on and
     /// `lock` off the engine hands off to the nearest station.
     ViewCenter {
         lat: f64,

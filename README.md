@@ -34,7 +34,7 @@ client: it displays those textures in the bar popover and full window.
 - **Keyboard first.** Everything the pointer reaches is a keystroke, and every
   key is rebindable.
 - **Honest.** Actual scan times. Missing, range-folded, and below-threshold
-  returns are drawn distinctly from measured values. No forecasts, no mosaic.
+  returns are drawn distinctly from measured values. Displays individual radar sweeps.
 
 ## Install
 
@@ -48,8 +48,13 @@ This clones the plugin into `~/.config/omarchy/plugins/com.omastorm.radar` and
 asks which bar section to use. The first time the popover opens it downloads
 the pinned engine binary from this repository's GitHub Releases, verifies its
 sha256 against `engine/release.pin`, and installs it under
-`~/.local/share/omastorm/bin`. Nothing else is written outside the plugin's
-own cache and config directories.
+`~/.local/share/omastorm/bin`. Runtime files, cached data, remembered view state, and configuration stay
+inside Omastorm's own directories.
+
+On first use, Omastorm uses your Omarchy weather location when available;
+otherwise it prompts you to search for a place or enter coordinates. To set
+a fixed launch location, including during agent-assisted installation, see
+[configuration and remembered state](docs/configuration.md).
 
 To open the window from the keyboard, add one line to
 `~/.config/hypr/bindings.lua`. Omastorm never writes that file.
@@ -68,10 +73,10 @@ Update with `omarchy plugin update com.omastorm.radar`.
 
 ## Use
 
-Click the mark in the bar for the popover: the home station, LIVE or the
+Click the mark in the bar for the popover: the selected station, LIVE or the
 connection condition, the actual scan time, step and play, and EXPAND. Click
 the radar or press Enter for the window; it opens on the same station and
-frame. Closing the window returns to home.
+frame and map view. Closing preserves your view for the next launch.
 
 In the window, drag to pan and scroll to zoom. The map follows the nearest
 station as you pan unless you lock it. A station you arrive at fetches its last
@@ -84,11 +89,10 @@ cannot be reached, with cached frames kept.
 | --- | --- |
 | `h` `j` `k` `l` or arrows | Pan |
 | `+` `-` | Zoom |
-| `0` | Home view |
+| `0` | Reset view |
 | `/` or `s` | Search sites |
 | `n` | Nearest site |
 | `Shift+L` | Lock the station |
-| `Shift+H` | Save the station as home |
 | `Space` | Loop the frames |
 | `[` `]` | Step a frame |
 | `Home` `End` | Oldest or newest frame |
@@ -102,13 +106,22 @@ are hidden by default and the legend says so; `w` shows them.
 
 ## Configuration
 
-`~/.config/omastorm/config.toml` is optional. Without `home_site` the home is
-the station nearest the location Omarchy's weather panel is set to. `Shift+H`,
-or the HOME button, saves the station on screen as `home_site`.
+`~/.config/omastorm/config.toml` holds deliberate preferences. The app saves
+last map center, zoom, and UI radar lock separately in
+`$XDG_DATA_HOME/omastorm/state.json` (default
+`~/.local/share/omastorm/state.json`). Navigation never rewrites your config.
+
+Explicit center coordinates win on every launch. Without them, Omastorm
+restores your last view, then falls back to the weather location or location
+picker. Radar selection is independent: a configured lock wins, otherwise a
+remembered lock is restored, otherwise the nearest radar follows the map.
 
 ```toml
-home_site = "KTLX"   # a station id; omit to use Omarchy's weather location
-follow = true        # follow the nearest station while panning
+# Optional: always open here. Omit both to remember the last map position.
+center_lat = 36.23708
+center_lon = -79.97948
+# locked_radar = "KFCX" # optional radar override; coordinates do not imply a lock
+
 treatment = "GLYPHS" # PIXELS, GLYPHS, or STIPPLE at launch
 weak_floor = 5       # dBZ; false draws every measured return
 

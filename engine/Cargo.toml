@@ -8,11 +8,9 @@ rust-version = "1.89"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 libc = "0.2"
-# Level II decoding (DESIGN.md, engine choice). Pinned release candidates,
-# current on crates.io 2026-09-06. `aws` (phase 4, live data) is the
-# real-time chunk bucket client: the pull-based `ChunkIterator` over the
-# same `reqwest`/rustls stack the tile fetcher uses; `aws-polling` would add
-# `futures` for a stream we do not need.
+# Level II decoding uses pinned release candidates. The `aws` feature
+# supplies the pull-based `ChunkIterator` for real-time chunks, sharing
+# the tile fetcher’s `reqwest`/rustls stack.
 nexrad-data = { version = "=1.0.0-rc.7", default-features = false, features = ["nexrad-model", "aws"] }
 nexrad-decode = "=1.0.0-rc.3"
 nexrad-model = "=1.0.0-rc.2"
@@ -22,8 +20,8 @@ tokio = { version = "1.53", features = ["rt", "net", "time", "sync", "io-util"] 
 # `Mask` per layer. Its optional `png-format` feature would duplicate `png`.
 tiny-skia = { version = "0.12", default-features = false, features = ["std", "simd"] }
 # The `osm` tile set (DESIGN.md, basemap tiles): one HTTPS GET per vector
-# tile. `rustls` is the feature `nexrad-data` rc.7 declares, so phase 4 adds no
-# second TLS stack; defaults off drops charset, HTTP/2, and proxy discovery.
+# tile. `rustls` shares the TLS stack with `nexrad-data`; disabling default
+# features excludes charset, HTTP/2, and proxy discovery.
 reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
 # Mapbox Vector Tile decoding (prost); default features off, since `wasm` is
 # the only one and it pulls geojson and wasm-bindgen.

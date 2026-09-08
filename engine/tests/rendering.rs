@@ -3,7 +3,7 @@
 //! every treatment, and compares each pixel against the shader's lookup rule
 //! replayed in Rust: once over the golden fixture codes and once over
 //! hand-built sweeps that carry the statuses the fixture lacks. A second test
-//! (phase 4, replacing the Python profiler's pan check) grabs the whole map
+//! grabs the whole map
 //! with tiles and overlay, pans the camera by a known number of pixels, and
 //! asserts every layer moved by exactly that much.
 //!

@@ -24,7 +24,7 @@ QtObject {
         background: color(setting("popups.background", colors.background), "#1a1b26"),
         foreground: color(setting("popups.text", colors.foreground), "#a9b1d6"),
         accent: color(colors.accent, "#7aa2f7"),
-        // Condition colours (DESIGN.md, phase 4 UX states): stale is the
+        // Condition colours (DESIGN.md): stale is the
         // theme's yellow, unavailable and offline its red.
         yellow: color(colors.yellow, "#e0af68"),
         red: color(colors.red, "#f7768e"),

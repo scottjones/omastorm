@@ -1,4 +1,4 @@
-//! Level II decoding for the polar radar path (`docs/protocol.md`, phase 2):
+//! Level II decoding for the polar radar path (`docs/protocol.md`):
 //! the lowest sweep of an Archive II volume as sorted rays of raw moment
 //! codes, the RGBA sweep texture, and the azimuth lookup table.
 //!

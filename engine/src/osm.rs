@@ -27,12 +27,10 @@ use tokio::{sync::Semaphore, task::spawn_blocking};
 /// `osm` starts here: about 500 m/px at 35° N, where Natural Earth's
 /// kilometre vertex spacing begins to show (DESIGN.md).
 pub const FROM_ZOOM: u32 = 7;
-/// OpenFreeMap serves z0–14; deeper tiles fall back to `ne` until the
-/// engine overzooms (not scheduled; the camera stays above z13 this phase).
+/// OpenFreeMap serves z0–14; deeper tiles fall back to `ne`.
 pub const MAX_ZOOM: u32 = 14;
 /// The TileJSON document naming the data version and the URL template.
-/// Configuration in phase 4 (`tiles_url`); `OMASTORM_TILES_URL` overrides it
-/// for development and the tests.
+/// `OMASTORM_TILES_URL` overrides it for development and tests.
 const DEFAULT_URL: &str = "https://tiles.openfreemap.org/planet";
 const USER_AGENT: &str = concat!(
     "omastorm/",

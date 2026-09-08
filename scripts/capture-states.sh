@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The connection states side by side (DESIGN.md, phase 4 UX states), as
+# The connection states side by side (DESIGN.md), as
 # review/states-*.png and one sheet, review/states-sheet.png.
 #
 # ARCHIVED and LIVE are the shared daemon as it is (LIVE needs a station
