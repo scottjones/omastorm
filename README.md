@@ -146,6 +146,6 @@ and [data/README.md](data/README.md).
 
 ```sh
 mise install
-mise run setup
-mise run run
+mise setup
+mise start
 ```

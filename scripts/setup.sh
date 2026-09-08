@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fresh-checkout setup, run through `mise run setup` so the mise tools are on
+# Fresh-checkout setup, run through `mise setup` so the mise tools are on
 # PATH. Checks the desktop packages mise does not manage, downloads the
 # fixture and geography, fetches crates, and builds the debug engine. Launch
 # never calls this; it is the one step that touches the network on purpose.
@@ -24,4 +24,4 @@ command -v ffmpeg > /dev/null 2>&1 || echo 'Optional: ffmpeg (demo video) is not
 bash scripts/setup-fixture.sh
 cargo fetch --locked
 cargo build --offline --locked
-echo 'Setup complete. Next: mise run run'
+echo 'Setup complete. Next: mise start'

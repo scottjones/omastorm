@@ -1,6 +1,7 @@
-# Repo prerequisites and the jobs. `mise install` gets the tools; `mise run`
-# lists the jobs. Quickshell, Qt Shader Tools, socat, ImageMagick, and ffmpeg
-# are desktop packages outside mise; `mise run setup` checks for them.
+# Repo prerequisites and the jobs. `mise install` gets the tools; `mise tasks`
+# lists the jobs and each runs as `mise <job>`. Quickshell, Qt Shader Tools,
+# socat, ImageMagick, and ffmpeg are desktop packages outside mise; `mise setup`
+# checks for them.
 
 [tools]
 rust = { version = "1.98", profile = "minimal", components = "rustfmt,clippy" }
@@ -29,7 +30,7 @@ run = [
   "shellcheck -x run.sh scripts/*.sh",
 ]
 
-[tasks.run]
+[tasks.start]
 description = "Launch the window against the shared debug daemon (needs GPU Quickshell)"
 run = "bash run.sh"
 
