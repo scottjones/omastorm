@@ -73,8 +73,8 @@ hello=$(timeout 2 socat -t0.2 - "UNIX-CONNECT:$XDG_RUNTIME_DIR/omastorm/engine.s
 [[ $(jq -r .engine <<< "$hello") == "$version" ]] \
   || die "The candidate reports engine $(jq -r .engine <<< "$hello"), not $version."
 
-# Notes: engine commits since the pinned release.
-notes=$(git log --no-merges --format='- %s' "$pinned..HEAD" -- engine Cargo.toml Cargo.lock)
+# Notes: commits since the pinned release that change the binary.
+notes=$(git log --no-merges --format='- %s' "$pinned..HEAD" -- engine/src engine/build.rs engine/tests engine/Cargo.toml Cargo.lock)
 [[ -n $notes ]] || notes='- No engine source changes since the previous release.'
 
 printf '\n%s at %s\n%s  %s\n\n%s\n\n' "$tag" "$(git rev-parse --short HEAD)" "$sum" "$asset" "$notes"
