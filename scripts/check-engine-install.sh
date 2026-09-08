@@ -3,8 +3,8 @@
 # mismatch, install under a scratch XDG_DATA_HOME, skip a current dest,
 # reject an unsupported machine, keep ordinary launch and a checkout
 # --ensure off the installer. Uses a scratch pin and the debug engine so
-# check.sh does not need a release rebuild. When target/dist matches the
-# committed pin, that asset is installed too.
+# check.sh does not need a release rebuild. A native candidate in target/dist
+# is also installed and bootstrapped when present.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -21,7 +21,7 @@ pin=$scratch/release.pin
 cat > "$pin" <<PIN
 tag=engine-test
 repo=wesleygrimes/omastorm
-asset=omastorm-engine-x86_64-unknown-linux-gnu
+asset=omastorm-engine-$(uname -m)-unknown-linux-gnu
 sha256=$sum
 PIN
 export OMASTORM_ENGINE_PIN=$pin
@@ -58,11 +58,43 @@ chmod 755 -- "$dest"
 OMASTORM_ENGINE_ASSET="$debug" bash scripts/install-engine.sh
 [[ $(sha256sum -- "$dest" | awk '{print $1}') == "$sum" ]] || fail 'Stale dest was not replaced'
 
-# aarch64 is named, not fetched.
-if OMASTORM_ENGINE_MACHINE=aarch64 bash scripts/install-engine.sh 2>"$scratch/arch.err"; then
-  fail 'Installer accepted aarch64'
+# Both architectures select their own default pin and reject the other asset.
+# Synthetic payloads test selection/hashing; native bootstrap is tested below.
+selector=$scratch/selector
+mkdir -p "$selector/scripts" "$selector/engine"
+cp scripts/install-engine.sh "$selector/scripts/"
+for machine in x86_64 aarch64; do
+  pin_name=release.pin
+  [[ $machine == aarch64 ]] && pin_name=release-aarch64.pin
+  printf 'payload for %s\n' "$machine" > "$scratch/$machine"
+  arch_sum=$(sha256sum "$scratch/$machine" | awk '{print $1}')
+  cat > "$selector/engine/$pin_name" <<PIN
+tag=engine-test
+repo=wesleygrimes/omastorm
+asset=omastorm-engine-$machine-unknown-linux-gnu
+sha256=$arch_sum
+PIN
+  env -u OMASTORM_ENGINE_PIN OMASTORM_ENGINE_MACHINE=$machine \
+    OMASTORM_ENGINE_ASSET="$scratch/$machine" bash "$selector/scripts/install-engine.sh"
+  [[ $(sha256sum "$dest" | awk '{print $1}') == "$arch_sum" ]] || fail "Wrong $machine pin selected"
+  other=x86_64
+  [[ $machine == x86_64 ]] && other=aarch64
+  if OMASTORM_ENGINE_MACHINE=$other OMASTORM_ENGINE_PIN="$selector/engine/$pin_name" \
+    bash scripts/install-engine.sh 2>"$scratch/arch.err"; then
+    fail 'Installer accepted a pin for the wrong architecture'
+  fi
+  rg -q 'does not match architecture' "$scratch/arch.err" || fail 'Wrong-arch error unclear'
+done
+rm "$selector/engine/release-aarch64.pin"
+if env -u OMASTORM_ENGINE_PIN OMASTORM_ENGINE_MACHINE=aarch64 \
+  bash "$selector/scripts/install-engine.sh" 2>"$scratch/arch.err"; then
+  fail 'Installer accepted missing ARM pin'
 fi
-rg -q 'aarch64 is deferred' "$scratch/arch.err" || fail "Arch error was unclear: $(cat "$scratch/arch.err")"
+rg -q 'No published aarch64 engine pin' "$scratch/arch.err" || fail 'Missing ARM pin error unclear'
+if OMASTORM_ENGINE_MACHINE=riscv64 bash scripts/install-engine.sh 2>"$scratch/arch.err"; then
+  fail 'Installer accepted unsupported architecture'
+fi
+rg -q 'Unsupported engine architecture' "$scratch/arch.err" || fail 'Unsupported arch error unclear'
 
 # Checkout --ensure uses the debug engine and does not write the data home.
 rm -rf "$XDG_DATA_HOME"
@@ -89,21 +121,32 @@ timeout 2 socat -t0.2 - "UNIX-CONNECT:$XDG_RUNTIME_DIR/omastorm/engine.sock" < /
   || fail 'Clone --ensure did not produce a hello'
 "$dest" stop >/dev/null
 
-# Committed pin, if present, is well formed; the dist asset must match when it exists.
-if [[ -f engine/release.pin ]]; then
-  committed=$(awk -F= '/^sha256=/{print $2}' engine/release.pin)
-  [[ $committed =~ ^[a-f0-9]{64}$ ]] || fail 'Committed pin sha256 is not 64 lowercase hex digits'
-  dist=target/dist/omastorm-engine-x86_64-unknown-linux-gnu
-  if [[ -f $dist ]]; then
-    [[ $(sha256sum -- "$dist" | awk '{print $1}') == "$committed" ]] \
-      || fail "$dist does not match engine/release.pin"
-    unset OMASTORM_ENGINE_PIN
-    export OMASTORM_ENGINE_ASSET=$dist OMASTORM_ENGINE_PIN=$PWD/engine/release.pin
-    rm -f "$dest"
-    bash scripts/install-engine.sh
-    [[ $(sha256sum -- "$dest" | awk '{print $1}') == "$committed" ]] \
-      || fail 'Committed-pin install did not match'
-  fi
+# Every committed pin is well formed and agrees with its architecture.
+for machine in x86_64 aarch64; do
+  pin_name=release.pin
+  [[ $machine == aarch64 ]] && pin_name=release-aarch64.pin
+  committed_pin=$PWD/engine/$pin_name
+  [[ -f $committed_pin ]] || continue
+  committed=$(awk -F= '/^sha256=/{print $2}' "$committed_pin")
+  [[ $committed =~ ^[a-f0-9]{64}$ ]] || fail "Invalid checksum in $committed_pin"
+  [[ $(awk -F= '/^asset=/{print $2}' "$committed_pin") == "omastorm-engine-$machine-unknown-linux-gnu" ]] \
+    || fail "Wrong architecture in $committed_pin"
+done
+
+# Exercise the actual native release candidate when available, including hello.
+case $(uname -m) in
+  x86_64) candidate=target/dist/release.pin ;;
+  aarch64) candidate=target/dist/release-aarch64.pin ;;
+esac
+if [[ -f $candidate ]]; then
+  export OMASTORM_ENGINE_PIN=$PWD/$candidate
+  export OMASTORM_ENGINE_ASSET=$PWD/target/dist/omastorm-engine-$(uname -m)-unknown-linux-gnu
+  rm -f "$dest"
+  bash scripts/install-engine.sh
+  "$dest" ensure >/dev/null
+  timeout 2 socat -t0.2 - "UNIX-CONNECT:$XDG_RUNTIME_DIR/omastorm/engine.sock" < /dev/null | rg -q '"type":"hello"' \
+    || fail 'Release candidate did not produce a hello'
+  "$dest" stop >/dev/null
 fi
 
-echo 'Engine install: pin verify, mismatch refuse, dest install, skip current, replace stale, arch, checkout --ensure, clone --ensure PASS'
+echo 'Engine install: pin verify, mismatch refuse, dest install, skip current, replace stale, both architectures, checkout --ensure, clone --ensure PASS'

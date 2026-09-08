@@ -1,42 +1,42 @@
 #!/usr/bin/env bash
-# Build the x86_64-unknown-linux-gnu GitHub Release asset and SHA256SUMS
-# under target/dist/. Pass --write-pin to copy the hash into engine/release.pin
-# after a successful build. Does not publish, tag, or push.
+# Build a native Linux release asset, SHA256SUMS, and a candidate pin under
+# target/dist/. Publish the asset before copying the candidate into engine/.
+# Does not modify committed pins, tag, publish, or push.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 die() { printf '%s\n' "$@" >&2; exit 1; }
-
-write_pin=0
-[[ ${1:-} == --write-pin ]] && write_pin=1
+[[ $# == 0 ]] || die 'Usage: bash scripts/build-engine-release.sh (pins are promoted only after publication)'
 
 if ! command -v rustc >/dev/null && [[ -x .tools/cargo/bin/rustc ]]; then
   export RUSTUP_HOME="$PWD/.tools/rustup" CARGO_HOME="$PWD/.tools/cargo"
   export PATH="$CARGO_HOME/bin:$PATH"
 fi
 host=$(rustc -vV | awk '/^host:/{print $2}')
-[[ $host == x86_64-unknown-linux-gnu ]] || die "This script builds the x86_64-unknown-linux-gnu asset (host is $host)."
+case $host in
+  x86_64-unknown-linux-gnu) pin_name=release.pin ;;
+  aarch64-unknown-linux-gnu) pin_name=release-aarch64.pin ;;
+  *) die "Unsupported release host: $host (use native x86_64 or aarch64 Linux GNU)." ;;
+esac
 
-bash scripts/cargo.sh build --release --locked --offline
-src=target/release/omastorm-engine
+# Explicit target keeps a Cargo target override from packaging the wrong CPU.
+bash scripts/cargo.sh build --release --locked --offline --target "$host" --target-dir target
+src=target/$host/release/omastorm-engine
 [[ -x $src ]] || die "cargo did not produce $src"
 
 mkdir -p target/dist
-asset=omastorm-engine-x86_64-unknown-linux-gnu
+asset=omastorm-engine-$host
 dest=target/dist/$asset
 cp -- "$src" "$dest"
 strip --strip-unneeded -- "$dest"
 chmod 755 -- "$dest"
 
 sum=$(sha256sum -- "$dest" | awk '{print $1}')
-# sha256sum -c format, names as they appear on the Release.
-(cd target/dist && sha256sum -- "$asset" > SHA256SUMS)
+# Include both assets if native builds have been collected in this directory.
+(cd target/dist && sha256sum -- omastorm-engine-*-unknown-linux-gnu > SHA256SUMS)
 printf '%s  %s\n' "$sum" "$dest"
-
 version=$(awk -F'"' '/^version = /{print $2; exit}' engine/Cargo.toml)
-pin=engine/release.pin
-if (( write_pin )); then
-  cat > "$pin" <<PIN
+cat > "target/dist/$pin_name" <<PIN
 # Pinned GitHub Release for the engine binary (DESIGN.md, distribution).
 # Bump only after the named release exists on wesleygrimes/omastorm.
 tag=engine-$version
@@ -44,10 +44,4 @@ repo=wesleygrimes/omastorm
 asset=$asset
 sha256=$sum
 PIN
-fi
-
-if [[ -f $pin ]]; then
-  expected=$(awk -F= '/^sha256=/{print $2}' "$pin")
-  [[ $sum == "$expected" ]] || die "Built $dest ($sum) does not match $pin ($expected)." \
-    "Re-run with --write-pin only when preparing a new engine release."
-fi
+printf 'Candidate pin: target/dist/%s; publish and verify the asset before copying to engine/%s.\n' "$pin_name" "$pin_name"

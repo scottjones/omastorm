@@ -22,8 +22,9 @@ not start the step after it in the same session.
   of git (see `.gitignore`); README media are assets on the plugin's GitHub
   Release and are linked by URL.
 - The engine binary is a GitHub Release asset (`engine-<version>`) pinned by
-  sha256 in `engine/release.pin`; `scripts/install-engine.sh` fetches and
-  verifies it. Bump the pin only after the release it names exists.
+  sha256 in `engine/release.pin` (x86_64) or `engine/release-aarch64.pin`
+  (ARM, once published); `scripts/install-engine.sh` fetches and verifies it.
+  Bump a pin only after the release and asset it names exist.
 - `manifest.json` `version` is the plugin's version; tag the same commit
   `v<version>`. The engine has its own version in `engine/Cargo.toml` and its
   own `engine-<version>` tag. The two move independently; the pin joins them.

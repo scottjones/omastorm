@@ -9,8 +9,8 @@ build --locked`. Run `bash run.sh` thereafter; launch builds offline, ensures a
 shared daemon exists, and starts Quickshell. Rust 1.89+ is required for a
 checkout build. Plugin installs use `scripts/install-engine.sh` and the pin
 in `engine/release.pin` instead of Rust; `bash scripts/build-engine-release.sh`
-produces the x86_64 asset under `target/dist/` and does not publish it
-(the pinned release holds the current file).
+produces the native x86_64 or aarch64 asset, `SHA256SUMS`, and a candidate
+pin under `target/dist/`. It does not publish or change committed pins.
 `scripts/cargo.sh` uses Cargo on PATH or, if present, an isolated
 `.tools/{cargo,rustup}` toolchain. No Python runs at launch.
 
@@ -334,3 +334,33 @@ The UI check verifies socket metadata, invalid JSON, a rejection that sits
 beside state until the client's next command (including one answered by the
 real daemon), the azimuth lookup and tile path rules, a `tiles_needed` round
 trip, and rejecting an unknown protocol version.
+
+## Publishing an ARM engine
+
+The `Engine release candidates` workflow builds and tests on native GitHub
+x86_64 and ARM Linux runners. Each artifact contains the stripped binary,
+`SHA256SUMS`, and its candidate pin. The native engine tests and installer
+bootstrap run on each CPU; Quickshell/GPU checks still run on the development
+desktop. Locally, fetch dependencies and fixtures as above, then run
+`bash scripts/build-engine-release.sh` on the matching native host.
+
+The installer selects `engine/release.pin` on x86_64 and
+`engine/release-aarch64.pin` on aarch64. Each has its own tag, asset, and
+checksum, so adding ARM does not replace the existing x86_64 binary.
+Unsupported CPUs and pins naming a different CPU fail before downloading.
+
+For the first ARM release, build the engine source matching the existing
+`engine-0.1.1` tag (check `git diff engine-0.1.1 -- engine/src engine/build.rs
+engine/data Cargo.toml Cargo.lock engine/Cargo.toml data/SHA256SUMS`). If the
+engine source changes, bump the engine version and publish a new engine tag.
+Download the ARM workflow artifact and verify it with `sha256sum -c
+SHA256SUMS` in its directory. Publish the ARM binary on the release named by
+the candidate pin, keeping the existing x86_64 asset. Download that published
+binary again and verify its checksum before copying `release-aarch64.pin`
+into `engine/`. Never pin an unpublished candidate or replace an existing
+release binary with different bytes.
+
+Before merging ARM support, commit that verified pin, change README's install
+platforms to “Omarchy 4 on x86_64 or aarch64,” and run `bash scripts/check.sh`.
+Until then, ARM bootstrap reports that its published pin is missing. An Asahi
+Omarchy install/popover/window check remains the final desktop validation.

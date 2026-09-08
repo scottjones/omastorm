@@ -1,0 +1,54 @@
+name: Engine release candidates
+
+on:
+  pull_request:
+    paths:
+      - 'engine/**'
+      - 'Cargo.*'
+      - 'data/**'
+      - 'golden/**'
+      - 'scripts/*engine*.sh'
+      - 'scripts/cargo.sh'
+      - 'scripts/setup-fixture.sh'
+      - '.github/workflows/engine-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: Fetch fixtures and dependencies
+        run: |
+          bash scripts/setup-fixture.sh
+          bash scripts/cargo.sh fetch --locked
+      - name: Test the native engine
+        run: bash scripts/cargo.sh test --offline --locked
+      - name: Build release candidate
+        run: bash scripts/build-engine-release.sh
+      - name: Verify native installation and bootstrap
+        env:
+          OMASTORM_ARCHIVE: ${{ github.workspace }}/data/raw/KTLX20130520_201643_V06.gz
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y socat ripgrep
+          bash scripts/check-engine-install.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine-${{ matrix.arch }}
+          path: target/dist/
+          if-no-files-found: error

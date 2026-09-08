@@ -253,17 +253,20 @@ reviewed with Wes the same day. Everything below is decided.
   source of truth; a `SHA256SUMS` next to the asset is for humans. Pinning,
   not `latest`, because UI and engine share protocol v1.
 - `scripts/build-engine-release.sh` builds `--release --locked --offline`
-  on `x86_64-unknown-linux-gnu`, copies and strips the binary into
-  `target/dist/`, writes `SHA256SUMS`, and with `--write-pin` updates the
-  pin. It does not tag, publish, or push. Release order: publish that
-  exact file as Release `engine-0.1.0`, then the pin may reach origin.
+  for its native x86_64 or aarch64 Linux GNU host, copies and strips the
+  binary into `target/dist/`, and writes `SHA256SUMS` and a candidate pin.
+  It does not update committed pins, tag, publish, or push. Publish and
+  verify the exact asset before promoting its candidate pin into `engine/`.
+  The release-candidate workflow tests/builds both CPUs on native runners.
 - `scripts/install-engine.sh` installs under
   `$XDG_DATA_HOME/omastorm/bin/omastorm-engine` (default
   `~/.local/share/omastorm/bin`). A dest whose sha256 already matches is
   left alone. Otherwise it copies `OMASTORM_ENGINE_ASSET` or curl-fetches
   the pinned URL (`OMASTORM_ENGINE_URL` overrides), verifies the committed
-  hash, and temp-and-renames. A mismatch is refused. `aarch64` is named
-  and deferred. A missing GitHub asset names the publish step and the
+  hash, and temp-and-renames. A mismatch is refused. x86_64 selects
+  `engine/release.pin`; aarch64 selects `engine/release-aarch64.pin`, with
+  the same fields and an independent hash. The pin must name the host CPU.
+  The ARM pin is added only after its asset is published and verified. A missing GitHub asset names the publish step and the
   checkout build. `ensure` still replaces a stale daemon by self-hash.
 - `run.sh --ensure` uses `target/debug/omastorm-engine` when that file is
   executable (ordinary development, no fetch). Otherwise it runs the
