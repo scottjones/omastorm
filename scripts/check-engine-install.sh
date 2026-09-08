@@ -3,8 +3,9 @@
 # mismatch, install under a scratch XDG_DATA_HOME, skip a current dest,
 # reject an unsupported machine, keep ordinary launch and a checkout
 # --ensure off the installer. Uses a scratch pin and the debug engine so
-# check.sh does not need a release rebuild. When target/dist matches the
-# committed pin, that asset is installed too.
+# check.sh does not need a release rebuild. The committed pin is then installed
+# for real and its asset must hash to the pin, speak the protocol the UI
+# accepts, and report the version its tag names.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -76,7 +77,8 @@ target/debug/omastorm-engine stop >/dev/null
 clone=$scratch/clone
 mkdir -p "$clone"
 git archive HEAD | tar -x -C "$clone"
-# Working tree: this check runs before the packaging commit is on HEAD.
+# The launcher and installer come from the working tree so the check covers
+# uncommitted changes to them; everything else is HEAD, as a clone would be.
 mkdir -p "$clone/scripts" "$clone/engine"
 cp -- run.sh "$clone/run.sh"
 cp -- scripts/install-engine.sh "$clone/scripts/install-engine.sh"
@@ -89,21 +91,41 @@ timeout 2 socat -t0.2 - "UNIX-CONNECT:$XDG_RUNTIME_DIR/omastorm/engine.sock" < /
   || fail 'Clone --ensure did not produce a hello'
 "$dest" stop >/dev/null
 
-# Committed pin, if present, is well formed; the dist asset must match when it exists.
-if [[ -f engine/release.pin ]]; then
-  committed=$(awk -F= '/^sha256=/{print $2}' engine/release.pin)
-  [[ $committed =~ ^[a-f0-9]{64}$ ]] || fail 'Committed pin sha256 is not 64 lowercase hex digits'
-  dist=target/dist/omastorm-engine-x86_64-unknown-linux-gnu
-  if [[ -f $dist ]]; then
-    [[ $(sha256sum -- "$dist" | awk '{print $1}') == "$committed" ]] \
-      || fail "$dist does not match engine/release.pin"
-    unset OMASTORM_ENGINE_PIN
-    export OMASTORM_ENGINE_ASSET=$dist OMASTORM_ENGINE_PIN=$PWD/engine/release.pin
-    rm -f "$dest"
-    bash scripts/install-engine.sh
-    [[ $(sha256sum -- "$dest" | awk '{print $1}') == "$committed" ]] \
-      || fail 'Committed-pin install did not match'
-  fi
+# The committed pin names what users get. Install from it for real: the
+# asset the pin names must exist on GitHub, hash to the pin, speak the
+# protocol version the UI accepts, and report the version its tag names.
+# The asset is fetched once into target/pinned/<sha256> and reused. When
+# GitHub is unreachable the step says so and passes; a checkout is correct
+# without the network, and the fetch is retried on the next run.
+committed=$(awk -F= '/^sha256=/{print $2}' engine/release.pin)
+tag=$(awk -F= '/^tag=/{print $2}' engine/release.pin)
+[[ $committed =~ ^[a-f0-9]{64}$ ]] || fail 'Committed pin sha256 is not 64 lowercase hex digits'
+[[ $tag =~ ^engine-([0-9]+\.[0-9]+\.[0-9]+)$ ]] || fail "Committed pin tag is not engine-<version>: $tag"
+pinned_version=${BASH_REMATCH[1]}
+ui_protocol=$(rg -o 'message\.v !== ([0-9]+)' -r '$1' ui/Engine.qml)
+[[ -n $ui_protocol ]] || fail 'Could not read the protocol version ui/Engine.qml accepts'
+cache=target/pinned/$committed
+unset OMASTORM_ENGINE_ASSET
+export OMASTORM_ENGINE_PIN=$PWD/engine/release.pin
+rm -f "$dest"
+if [[ -f $cache ]]; then
+  OMASTORM_ENGINE_ASSET=$cache bash scripts/install-engine.sh
+elif curl -fsI --max-time 5 https://github.com > /dev/null 2>&1; then
+  bash scripts/install-engine.sh
+  install -D -m 755 "$dest" "$cache"
+else
+  echo 'Committed pin: GitHub unreachable, the published asset was not verified this run.' >&2
+fi
+if [[ -x $dest ]]; then
+  [[ $(sha256sum -- "$dest" | awk '{print $1}') == "$committed" ]] || fail 'Pinned asset install did not match the pin'
+  "$dest" ensure
+  hello=$(timeout 2 socat -t0.2 - "UNIX-CONNECT:$XDG_RUNTIME_DIR/omastorm/engine.sock" < /dev/null | head -n1 || true)
+  "$dest" stop >/dev/null
+  rg -q '"type":"hello"' <<< "$hello" || fail 'Pinned asset did not produce a hello'
+  [[ $(jq -r .v <<< "$hello") == "$ui_protocol" ]] \
+    || fail "Pinned asset speaks protocol v$(jq -r .v <<< "$hello"); ui/Engine.qml accepts v$ui_protocol"
+  [[ $(jq -r .engine <<< "$hello") == "$pinned_version" ]] \
+    || fail "Pinned asset reports engine $(jq -r .engine <<< "$hello"); the pin names $tag"
 fi
 
-echo 'Engine install: pin verify, mismatch refuse, dest install, skip current, replace stale, arch, checkout --ensure, clone --ensure PASS'
+echo 'Engine install: pin verify, mismatch refuse, dest install, skip current, replace stale, arch, checkout --ensure, clone --ensure, pinned asset PASS'
