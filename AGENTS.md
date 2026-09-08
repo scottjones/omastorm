@@ -46,7 +46,7 @@ mise stop                                    # end the shared daemon by hand (a 
 mise lint                                    # rustfmt check, clippy, shellcheck
 mise test                                    # Rust unit and socket tests
 mise check                                   # the integration suite against a scratch daemon (~1 min); --gpu adds the rendering test
-mise release                                 # native release binary under target/dist/; never publishes
+mise build-release                           # optimized, stripped engine under target/dist/ as a release candidate; publishes nothing
 bash scripts/capture-review.sh               # offscreen captures to review/ (ImageMagick; ignored output)
 omarchy plugin validate .                    # the manifest check the shell and the marketplace apply
 ```

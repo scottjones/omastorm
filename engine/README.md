@@ -8,7 +8,7 @@ when one is missing), fetches crates, and builds the debug engine. Run
 `mise start` thereafter; launch builds offline, ensures a shared daemon
 exists, and starts Quickshell. Rust 1.89 is the minimum; `mise.toml` pins the
 version a checkout uses. Plugin installs use `scripts/install-engine.sh` and
-the pin in `engine/release.pin` instead of Rust; `mise release` produces
+the pin in `engine/release.pin` instead of Rust; `mise build-release` produces
 the x86_64 asset under `target/dist/` and does not publish it (the pinned
 release holds the current file). `scripts/cargo.sh` uses Cargo on PATH, which
 mise provides. No Python runs at launch.

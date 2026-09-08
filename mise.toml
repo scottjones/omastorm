@@ -46,8 +46,8 @@ run = "cargo test --offline --locked"
 description = "Integration suite against a scratch daemon; run before every commit (--gpu adds the rendering test)"
 run = "bash scripts/check.sh"
 
-[tasks.release]
-description = "Native release binary and SHA256SUMS under target/dist/; never publishes (--write-pin updates engine/release.pin)"
+[tasks.build-release]
+description = "Optimized, stripped engine and SHA256SUMS under target/dist/ as a release candidate; publishes nothing (--write-pin updates engine/release.pin)"
 run = "bash scripts/build-engine-release.sh"
 
 [tasks.clean]
