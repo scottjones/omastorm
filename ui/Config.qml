@@ -27,6 +27,9 @@ QtObject {
     readonly property var centerLat: typeof values.center_lat === "number" ? values.center_lat : undefined
     readonly property var centerLon: typeof values.center_lon === "number" ? values.center_lon : undefined
     readonly property string lockedRadar: typeof values.locked_radar === "string" ? values.locked_radar.trim().toUpperCase() : ""
+    // Isolated checks/captures must explicitly opt in to network location.
+    readonly property bool ipLocationEnabled: values.ip_location === true
+        || (values.ip_location === undefined && !Quickshell.env("OMASTORM_CONFIG"))
     // The raw value; the window judges it against the three treatments.
     readonly property var treatment: values.treatment
     // The raw value; the window judges it: a dBZ number, false, or unset.
@@ -59,7 +62,8 @@ QtObject {
     function parseLocation(raw) {
         try {
             var json = JSON.parse(raw);
-            var lat = Number(json.latitude), lon = Number(json.longitude);
+            var lat = json.latitude, lon = json.longitude;
+            if (typeof lat !== "number" || typeof lon !== "number") return null;
             if (!isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
             return { name: typeof json.name === "string" ? json.name : "", lat: lat, lon: lon };
         } catch (e) { return null; }

@@ -50,6 +50,9 @@ asset_$other=omastorm-engine-$other-unknown-linux-gnu
 sha256_$other=$other_sum
 PIN
 export OMASTORM_ENGINE_PIN=$pin
+# The installer is still x86-only on this independent feature branch. Its
+# fixtures exercise selection/hash handling using the native debug binary.
+export OMASTORM_ENGINE_MACHINE=x86_64
 dest=$XDG_DATA_HOME/omastorm/bin/omastorm-engine
 install_cmd=(bash scripts/fetch-engine.sh)
 

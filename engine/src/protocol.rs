@@ -18,6 +18,16 @@ pub enum Message<'a> {
     Error(&'a Rejection<'a>),
     TileReady(&'a TileReady<'a>),
     Places(&'a Places<'a>),
+    Location(&'a Location),
+}
+
+/// Approximate IP location answering `locate_home`, only to its requester.
+#[derive(Serialize, Clone, Debug)]
+pub struct Location {
+    pub v: u32,
+    pub name: String,
+    pub lat: f64,
+    pub lon: f64,
 }
 
 /// One tile answering a client's `tiles_needed`, sent to that client alone
@@ -320,6 +330,8 @@ pub struct Geometry {
 #[derive(Deserialize, PartialEq, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Command {
+    /// Request approximate IP location; never changes the station itself.
+    LocateHome,
     /// Go live on a station from the `hello` table: the newest
     /// cached frame or an empty one shows at once, and the poller follows.
     SelectSite {

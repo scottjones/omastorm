@@ -6,6 +6,10 @@ QtObject {
     id: engine
     property var state: null
     property var sites: []
+    property var location: null
+    property bool locationRequested: false
+    property bool locationPending: false
+    property string locationError: ""
     /// Transport and parsing trouble: disconnected, unreadable message,
     /// unknown protocol version. Cleared by the next valid state.
     property string error: ""
@@ -56,7 +60,12 @@ QtObject {
                 socket.connected = false;
                 return;
             }
-            if (message.type === "hello") sites = message.sites;
+            if (message.type === "hello") {
+                sites = message.sites;
+                locationRequested = false;
+                location = null;
+                locationError = "";
+            }
             else if (message.type === "state") {
                 if (!message.frame || !validTexturePath(message.frame.texture))
                     throw new Error("Invalid texture path: " + JSON.stringify(message.frame.texture));
@@ -64,6 +73,18 @@ QtObject {
                     throw new Error("Invalid azimuth lookup path: " + JSON.stringify(message.frame.azimuthLut));
                 state = message;
                 error = "";
+            } else if (message.type === "location") {
+                if (typeof message.lat !== "number" || typeof message.lon !== "number"
+                    || !isFinite(message.lat) || !isFinite(message.lon)
+                    || Math.abs(message.lat) > 90 || Math.abs(message.lon) > 180)
+                    throw new Error("Invalid location coordinates");
+                location = {name: typeof message.name === "string" ? message.name : "", lat: message.lat, lon: message.lon};
+                locationPending = false;
+                locationTimeout.stop();
+            } else if (message.type === "error" && message.command === "locate_home") {
+                locationError = message.message;
+                locationPending = false;
+                locationTimeout.stop();
             } else if (message.type === "error") rejection = message.message;
             else if (message.type === "tile_ready") {
                 if (!validTilePath(message.path))
@@ -78,6 +99,21 @@ QtObject {
         if (command.type !== "tiles_needed" && command.type !== "search_places") rejection = "";
         socket.write(JSON.stringify(command) + "\n");
     }
+    function locateHome() {
+        if (locationRequested || !state || state.source !== "live") return;
+        locationRequested = true;
+        locationPending = true;
+        locationTimeout.restart();
+        send({type: "locate_home"});
+    }
+    // Older engines ignore unknown commands. Leave onboarding usable then too.
+    property Timer locationTimeout: Timer {
+        interval: 12000
+        onTriggered: {
+            engine.locationError = "IP location unavailable; choose a location.";
+            engine.locationPending = false;
+        }
+    }
     property var socket: socketFactory.createObject(engine)
     property Component socketFactory: Component {
         Socket {
@@ -86,6 +122,8 @@ QtObject {
             parser: SplitParser { onRead: data => engine.receive(data) }
             onConnectedChanged: {
                 if (!connected && !engine.incompatible) {
+                    engine.locationPending = false;
+                    engine.locationTimeout.stop();
                     engine.state = null;
                     engine.error = "Radar engine disconnected. Reconnecting…";
                 }
