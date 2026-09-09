@@ -34,12 +34,26 @@ open clients reconnect. Use `mise stop` to end it, never `kill`. Close only
 Quickshell instances you launched; a windowless process left after closing is
 a leak to investigate.
 
-`mise start` loads this checkout's `ui/`, not the installed plugin under
-`~/.config/omarchy/plugins/com.omastorm.radar` (the bar still uses that
-copy). A tty launch prints the qml path, live vs archive, and which
-config/state/place files apply. `mise restart` stops the daemon first so a
-check or capture leftover is not reused. `mise onboard` starts with no
-weather file and no remembered view, so the location picker shows.
+`mise start` loads this checkout's `ui/` in a window. The bar still uses the
+installed plugin under `~/.config/omarchy/plugins/com.omastorm.radar` unless
+you point it here:
+
+```sh
+mise plugin-link
+```
+
+That replaces the install directory with a symlink to this checkout (the
+previous clone is kept beside it), restarts the Omarchy shell, and
+enables the bar widget.
+After that, `mise start`, `mise restart`, and `mise onboard` also restart the
+shell so the popover matches this tree (a symlink skips the plugin file
+watcher, and `rescanPlugins` keeps the old QML). `mise onboard`'s empty weather
+and state files apply only to the window; the popover keeps its usual place
+files. `mise plugin-unlink` restores the clone. A tty launch prints the qml path,
+live vs archive, whether the bar is linked, and which config/state/place
+files apply. `mise restart` stops the daemon first so a check or capture
+leftover is not reused. `mise onboard` starts the window with no weather file
+and no remembered view, so the location picker shows.
 
 ## Verify and submit
 

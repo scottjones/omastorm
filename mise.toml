@@ -32,15 +32,23 @@ run = [
 
 [tasks.start]
 description = "Launch the window against the shared debug daemon (needs GPU Quickshell)"
-run = "bash run.sh"
+run = "OMASTORM_RESCAN_PLUGIN=1 bash run.sh"
 
 [tasks.restart]
 description = "Stop the shared debug daemon, then launch this checkout's window"
-run = "bash -c 'test -x target/debug/omastorm-engine && target/debug/omastorm-engine stop || true; exec bash run.sh'"
+run = "bash -c 'test -x target/debug/omastorm-engine && target/debug/omastorm-engine stop || true; exec env OMASTORM_RESCAN_PLUGIN=1 bash run.sh'"
 
 [tasks.onboard]
 description = "Launch this checkout with no weather or remembered view (location picker)"
-run = "mkdir -p target && : > target/onboard-state.json && OMASTORM_LOCATION=/dev/null OMASTORM_STATE=$PWD/target/onboard-state.json bash run.sh"
+run = "mkdir -p target && : > target/onboard-state.json && OMASTORM_LOCATION=/dev/null OMASTORM_STATE=$PWD/target/onboard-state.json OMASTORM_RESCAN_PLUGIN=1 bash run.sh"
+
+[tasks.plugin-link]
+description = "Point the Omarchy bar plugin at this checkout and enable it"
+run = "bash scripts/link-plugin.sh"
+
+[tasks.plugin-unlink]
+description = "Restore the installed Omarchy plugin clone"
+run = "bash scripts/link-plugin.sh --unlink"
 
 [tasks.stop]
 description = "End the shared debug daemon"
