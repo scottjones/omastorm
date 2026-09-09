@@ -2,7 +2,7 @@
 
 Open-source, live NEXRAD radar for the Omarchy desktop. Beta.
 
-[![Omastorm, one live take on the Jacksonville radar](https://github.com/wesleygrimes/omastorm/releases/download/v0.1.0/omastorm-preview.gif)](https://github.com/wesleygrimes/omastorm/releases/download/v0.1.0/omastorm-demo.mp4)
+[![Omastorm window: live take with loop, search, keys, and treatments](https://github.com/wesleygrimes/omastorm/releases/download/media-2026-09-09/omastorm-preview.gif)](https://github.com/wesleygrimes/omastorm/releases/download/media-2026-09-09/omastorm-demo.mp4)
 
 Live KJAX demo: playback, pan and zoom, treatments, weak returns, station
 search, and keyboard controls.
@@ -12,9 +12,9 @@ the actual scan time. Expand it for the full window: every NEXRAD site in the
 network, reflectivity at native resolution, a timeline you can scrub, all drawn
 in your Omarchy theme.
 
-![The Omastorm window, live](https://github.com/wesleygrimes/omastorm/releases/download/v0.1.0/window-live.png)
+![The Omastorm window, live](https://github.com/wesleygrimes/omastorm/releases/download/media-2026-09-09/window-live.png)
 
-![The Omastorm popover, live](https://github.com/wesleygrimes/omastorm/releases/download/v0.1.0/popover.png)
+![The Omastorm popover, live](https://github.com/wesleygrimes/omastorm/releases/download/media-2026-09-09/popover.png)
 
 A headless Rust engine fetches and decodes NEXRAD Level II data and prepares
 GPU-ready radar textures. An Omarchy plugin built with Quickshell/QML is the
@@ -41,7 +41,7 @@ client: it displays those textures in the bar popover and full window.
 Omarchy 4 on x86_64.
 
 ```sh
-omarchy plugin add https://github.com/wesleygrimes/omastorm --enable
+omarchy plugin add https://github.com/wesleygrimes/omastorm.git --enable
 ```
 
 This clones the plugin into `~/.config/omarchy/plugins/com.omastorm.radar` and
@@ -201,8 +201,24 @@ Code: MIT, see [LICENSE](LICENSE).
 
 ## Contributing
 
-Start with [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, checks, and the
-pull request workflow. [DESIGN.md](DESIGN.md) defines the app's visual and
-interaction rules; the [engine guide](engine/README.md) and
-[wire protocol](docs/protocol.md) explain the backend/client boundary.
-Maintainers can follow the [release guide](docs/RELEASING.md).
+This is a beta. Contributions are welcome.
+[CONTRIBUTING.md](CONTRIBUTING.md) is setup, checks, and pull requests.
+Open work that is ready for a first patch is labeled
+[`good first issue`](https://github.com/wesleygrimes/omastorm/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+and [`help wanted`](https://github.com/wesleygrimes/omastorm/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22).
+
+A headless Rust engine serves GPU textures over a Unix socket. The
+Quickshell UI is the client. `manifest.json` is the Omarchy plugin.
+
+- `engine/` Rust daemon: NEXRAD decode, cache, and the socket protocol
+- `ui/` Quickshell QML for the bar popover and window
+- `scripts/` setup, checks, captures, install, and release
+- `data/` fixture provenance and checksums (`data/raw/` is downloaded)
+- `golden/` decoder answer key for the archived KTLX scan
+- `docs/` protocol, configuration, and releasing
+- `site/` omastorm.com
+
+Read [DESIGN.md](DESIGN.md) before proposing a product change and
+[docs/protocol.md](docs/protocol.md) before touching the engine/client
+boundary. Maintainers cut releases with
+[docs/RELEASING.md](docs/RELEASING.md).
