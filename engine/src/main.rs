@@ -9,8 +9,8 @@ use catalog::Entry;
 use chrono::{DateTime, Utc};
 use protocol::{
     Basemap, Command, Connection, ConnectionStatus, Frame, FrameStatus, Geometry, Handshake, Hello,
-    Message, NaturalEarth, Rejection, SiteSelection, SiteTable, Source, State, Station, TileReady,
-    TimelineEntry, VERSION, is_texture_path,
+    Message, NaturalEarth, Places, Rejection, SiteSelection, SiteTable, Source, State, Station,
+    TileReady, TimelineEntry, VERSION, is_texture_path,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -806,8 +806,10 @@ impl Shared {
                 false,
                 Some("Only reflectivity at elevation index 0 is available in this build.".into()),
             ),
-            // Tile requests are answered by the client's tile task, not state.
-            Command::TilesNeeded { .. } | Command::Unsupported => return None,
+            // Tile requests and place search are answered to the sender, not state.
+            Command::TilesNeeded { .. } | Command::SearchPlaces { .. } | Command::Unsupported => {
+                return None;
+            }
         };
         if changed {
             self.broadcast();
@@ -1162,6 +1164,39 @@ fn receive(
                     return;
                 }
                 Err(reason) => format!("Invalid tiles_needed command: {reason}."),
+            }
+        }
+        Ok(Command::SearchPlaces { query, lat, lon }) => {
+            if query.chars().count() > 200 {
+                "search_places query is too long.".into()
+            } else {
+                let origin = match (lat, lon) {
+                    (None, None) => None,
+                    (Some(lat), Some(lon))
+                        if (-90.0..=90.0).contains(&lat) && (-180.0..=180.0).contains(&lon) =>
+                    {
+                        Some((lat, lon))
+                    }
+                    _ => {
+                        let message =
+                            "search_places needs lat in [-90, 90] and lon in [-180, 180].";
+                        let rejection = Rejection {
+                            v: VERSION,
+                            command: kind,
+                            message,
+                        };
+                        let _ = reply.try_send(line(&Message::Error(&rejection)));
+                        return;
+                    }
+                };
+                let results = tiles::search_places(&query, origin, 8);
+                let message = Places {
+                    v: VERSION,
+                    query: &query,
+                    results: &results,
+                };
+                let _ = reply.try_send(line(&Message::Places(&message)));
+                return;
             }
         }
         Ok(command) => match shared.lock().unwrap().apply(command) {

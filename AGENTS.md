@@ -12,7 +12,8 @@ Use the contribution workflow and its required checks for every commit.
   compiled `.qsb` shaders are required exceptions. See `.gitignore`.
 - Never modify Omarchy or system configuration. Writes belong only in the
   repo, `$XDG_RUNTIME_DIR/omastorm/`, `$XDG_CACHE_HOME/omastorm/`,
-  `$XDG_DATA_HOME/omastorm/`, or `~/.config/omastorm/`. Only an explicit run of
+  `$XDG_DATA_HOME/omastorm/`, `$XDG_STATE_HOME/omastorm/` (or
+  `~/.local/state/omastorm/`), or `~/.config/omastorm/`. Only an explicit run of
   `scripts/install-launcher.sh` may write
   `$XDG_DATA_HOME/applications/omastorm.desktop`.
 - Ordinary `run.sh` never downloads. Network access belongs in the engine's

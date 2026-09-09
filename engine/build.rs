@@ -113,6 +113,12 @@ fn main() {
         } else {
             "village"
         };
+        let iso = p["iso_a2"].as_str().unwrap_or("");
+        let country = if iso.is_empty() || iso == "-99" {
+            ""
+        } else {
+            iso
+        };
         places.push(serde_json::json!({
             "name": name,
             "lat": (lat * SCALE).round() / SCALE,
@@ -120,6 +126,8 @@ fn main() {
             "class": class,
             "rank": p["scalerank"].as_u64().unwrap_or(10),
             "minZoom": p["min_zoom"].as_f64().unwrap_or(10.0),
+            "region": p["adm1name"].as_str().unwrap_or(""),
+            "country": country,
         }));
     }
     fs::write(

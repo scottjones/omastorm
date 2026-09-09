@@ -34,6 +34,13 @@ open clients reconnect. Use `mise stop` to end it, never `kill`. Close only
 Quickshell instances you launched; a windowless process left after closing is
 a leak to investigate.
 
+`mise start` loads this checkout's `ui/`, not the installed plugin under
+`~/.config/omarchy/plugins/com.omastorm.radar` (the bar still uses that
+copy). A tty launch prints the qml path, live vs archive, and which
+config/state/place files apply. `mise restart` stops the daemon first so a
+check or capture leftover is not reused. `mise onboard` starts with no
+weather file and no remembered view, so the location picker shows.
+
 ## Verify and submit
 
 Keep each change scoped to one issue. Run `mise check` before every commit;

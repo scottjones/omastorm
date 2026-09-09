@@ -23,17 +23,35 @@ below-threshold stay distinct from measured values. Whatever a change hides
 is named in the legend. Keep OSM (ODbL) and Natural Earth attribution with
 the data and on screen.
 
-## Home and map
+## Location and map
 
-Home is a place, not a radar. The place is Omarchy's weather location
-(`weather.json`). Do not add a geocoder, GeoClue, or a city/zip field. Do not
-fetch at launch to find the user. `home_site` may pin a station; it does not
-replace the place. The camera belongs on the place. `Shift+H` saves a station id, not a point.
+The camera is a place, not a radar. Resolve the map centre in this order:
+explicit `center_lat`/`center_lon` in config.toml, the remembered centre in
+state.json, valid coordinates from Omarchy's weather location
+(`weather.json`), then the location picker. Explicit coordinates apply on
+every launch. Do not fetch at launch to find the user. Do not add GeoClue.
 
-One station's exact sweep at a time. Follow hands off as the centre moves;
-lock pins; the picker locks; `n` releases. A hand-off does not move the
-camera. Do not ship a downloaded mosaic; if several sites are ever shown,
-composite their exact sweeps.
+When no location is known, the popover offers “Choose a location,” which
+opens a picker in the expanded window. The picker searches Natural Earth
+places (an engine `search_places` reply, with state/region and country so
+two Jacksonvilles are distinct) and accepts numeric
+latitude/longitude. Choosing a location writes state.json, never
+config.toml. `Shift+H` and the LOCATION control keep that picker reachable
+after onboarding. `0` / RESET returns the camera to the configured centre,
+else Omarchy's weather location, else the current centre at the default
+span.
+
+Radar selection is independent of the camera: configured `locked_radar`,
+else the remembered UI lock, else the nearest radar with automatic
+following. `n` releases the lock and selects the nearest radar; the site
+picker locks. Neither moves the camera. A configured lock applies on
+launch; unlocking or locking in the session lasts until relaunch. Loading
+frames and automatic radar hand-offs never move the camera. The view is
+restored across close/reopen and kept across expansion and engine
+reconnects. A centre outside the locked radar's coverage is allowed; the
+chrome says so.
+
+One station's exact sweep at a time.
 
 A station with no frame yet is the map without radar. Show no loading animation.
 
@@ -44,11 +62,13 @@ plus GPU textures. Radar values do not enter JSON or QML. Pan and zoom are
 uniforms. The engine does not read `config.toml`; the UI sends commands.
 
 New settings are optional, omit means default, and a bad value is named in
-the status slot. Do not put session restore (last pan, lock) in config.toml.
-Do not write Omarchy, Hyprland, or system configuration.
+the status slot. config.toml holds deliberate preferences. state.json holds
+the remembered map centre, zoom, and UI radar lock; write it atomically.
+Do not put session restore in config.toml. Do not write Omarchy, Hyprland,
+or system configuration.
 
 A product is a texture, legend, units, timestamp, and source from the engine.
-Level II is what is drawn. Level III, if it lands, is an overlay.
+Level II is what is drawn.
 
 ## Scope
 

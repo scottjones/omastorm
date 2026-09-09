@@ -163,6 +163,7 @@ when `osm` becomes available. `labels` are the tile's places for the overlay.
 {"type":"follow","enabled":true}
 {"type":"lock","enabled":false}
 {"type":"view_center","lat":35.4,"lon":-97.5}
+{"type":"search_places","query":"norman","lat":35.4,"lon":-97.5}
 {"type":"play"}  {"type":"pause"}  {"type":"step","delta":-1}  {"type":"seek","id":"..."}
 {"type":"set_product","product":"REF","elevationIndex":0}
 {"type":"tiles_needed","z":11,"x0":469,"y0":807,"x1":472,"y1":810}
@@ -186,6 +187,20 @@ when `osm` becomes available. `labels` are the tile's places for the overlay.
   the centre is the user's. A latitude outside ±90 or a longitude outside
   ±180 is answered with an `error`. `lock` and `follow` are shared flags;
   releasing the lock hands off on the next settle, not at once.
+- `search_places` ranks Natural Earth populated places for the location
+  picker and is answered with `places` to the sender only, like
+  `tile_ready`. `query` is required; optional `lat` and `lon` order nearer
+  matches first. Word-start matches beat substrings. At most eight results.
+  A blank query returns no results. A latitude or longitude outside range
+  is answered with an `error`. The reply is not shared state:
+
+```json
+{"type":"places","v":1,"query":"jacksonville",
+ "results":[{"name":"Jacksonville","lat":30.3322,"lon":-81.6749,"class":"city","rank":8,
+             "region":"Florida","country":"US"}]}
+```
+  `region` is Natural Earth's admin-1 name (a US state, a Canadian province);
+  `country` is the ISO 3166-1 alpha-2 code. Either may be omitted when empty.
 - `set_product` requests a product and elevation. An unsupported selection
   returns an `error` to its sender and retains the current frame.
 - `step` moves `delta` entries along `timeline` from the frame shown, stopping
@@ -317,9 +332,11 @@ paints live.
 ## Configuration
 
 `~/.config/omastorm/config.toml` is read and watched by the UI, never by the
-engine. Home and follow settings become `select_site` and `follow` commands;
-treatment and the weak-return floor stay in the UI. Keys, values, and error
-reporting are in [configuration.md](configuration.md).
+engine. An explicit centre and a locked radar become `view_center`,
+`select_site`, `follow`, and `lock` commands; treatment and the weak-return
+floor stay in the UI. Remembered camera and the UI radar lock live in
+state.json, also UI-only. Keys, values, and error reporting are in
+[configuration.md](configuration.md).
 
 ## Implementation notes
 
@@ -327,9 +344,11 @@ The shell session
 keeps a status connection; each visible popover and expanded window has its
 own connection so tile requests remain independent. Expand uses the shared
 station, frame, and play state directly, sending no select/seek/play commands.
-The session applies home on startup and window close, selects only when
-necessary, and holds the last treatment in memory. Home edits apply at once.
-With no home configured or inferred, closing leaves the selected station alone.
+The session restores the remembered view on startup and keeps it across
+window close, expansion, and reconnect; it selects a radar only when
+necessary and never moves the camera for a loading frame or a hand-off.
+Location picks write state.json. With no location, the popover offers the
+picker instead of inventing a centre.
 
 `hello` additionally includes `pid`, `build` (an opaque fingerprint),
 `sitesSource`, `sitesRetrieved`, and `sitesNotes`. These allow the launcher to

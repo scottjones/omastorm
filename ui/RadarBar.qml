@@ -13,7 +13,6 @@ BarWidget {
     readonly property bool live: state && state.source === "live" && state.connection.status === "ok"
     readonly property bool down: !state || state.connection.status === "offline" || state.connection.status === "unavailable"
     function open() {
-        if (!session.windowOpen) session.returnHome();
         popoutSwitchClosing = false;
         opened = true;
     }

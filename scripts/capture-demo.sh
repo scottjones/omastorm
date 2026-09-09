@@ -21,10 +21,10 @@ export OMASTORM_CONFIG="$demo_dir/config.toml"
 unset OMASTORM_ARCHIVE
 rm -rf "$demo_dir"
 mkdir -p "$XDG_RUNTIME_DIR" "$XDG_CACHE_HOME" "$demo_dir/shaders" "$demo_dir/frames"
-printf 'home_site = "%s"\n' "$site" > "$OMASTORM_CONFIG"
+jq -r --arg id "$site" '.sites[] | select(.id==$id) | "center_lat = \(.lat)\ncenter_lon = \(.lon)\nlocked_radar = \"\(.id)\""' engine/data/sites.json > "$OMASTORM_CONFIG"
 cleanup() { target/debug/omastorm-engine stop >/dev/null 2>&1 || true; }
 trap cleanup EXIT
-cp ui/Theme.qml ui/Engine.qml ui/RadarMark.qml ui/RadarMap.qml ui/SitePicker.qml ui/Sites.js ui/KeysSheet.qml ui/Keys.js ui/Timeline.js ui/Config.qml ui/Toml.js "$demo_dir/"
+cp ui/Theme.qml ui/Engine.qml ui/RadarMark.qml ui/RadarMap.qml ui/SitePicker.qml ui/Sites.js ui/KeysSheet.qml ui/Keys.js ui/Timeline.js ui/Config.qml ui/Toml.js ui/Location.js ui/LocationPicker.qml ui/Remembered.qml ui/PluginSession.qml ui/qmldir "$demo_dir/"
 cp ui/shaders/*.qsb "$demo_dir/shaders/"
 ruby - "$demo_dir" <<'RUBY'
 dir = ARGV.fetch(0)
@@ -33,7 +33,7 @@ harness = <<'QML'
     // Start once the station is live and the backfill has given it a loop.
     Timer { interval: 500; running: true; repeat: true
         onTriggered: if (app.scan && app.scan.scanTime && app.frames.filter(f => f.status === "complete").length >= 8) { running = false; waitTiles.start(); } }
-    Timer { id: waitTiles; interval: 5000; onTriggered: { map.reset(); demo.homeSpan = map.span; demo.advance(); } }
+    Timer { id: waitTiles; interval: 5000; onTriggered: { app.resetView(); demo.homeSpan = map.span; demo.advance(); } }
     QtObject {
         id: demo
         property int frame: 0

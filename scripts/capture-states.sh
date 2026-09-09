@@ -26,9 +26,13 @@ rm -f "$review"/states-*.png
 # The windows read a scratch config.toml naming the station, or none.
 scratch=$(mktemp -d /tmp/omastorm-states.XXXXXX)
 mkdir -p "$scratch/offline" "$scratch/silent" "$scratch/cache"
-config_for() { # station id, or nothing for no home station
+config_for() { # station id, or nothing for no configured radar
   local file="$scratch/config-${1:-none}.toml"
-  if [[ -n ${1:-} ]]; then printf 'home_site = "%s"\n' "$1" > "$file"; else : > "$file"; fi
+  if [[ -n ${1:-} ]]; then
+    jq -r --arg id "$1" '.sites[] | select(.id==$id) | "center_lat = \(.lat)\ncenter_lon = \(.lon)\nlocked_radar = \"\(.id)\""' engine/data/sites.json > "$file"
+  else
+    : > "$file"
+  fi
   echo "$file"
 }
 

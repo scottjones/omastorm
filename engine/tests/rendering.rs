@@ -569,11 +569,9 @@ fn install_harness(dir: &Path) {
     let shader = |name: &str| json!(format!("{ROOT}/ui/shaders/{name}.frag.qsb")).to_string();
     assert!(component.contains("\"shaders/radar.frag.qsb\"") && component.contains("id: map\n"));
     assert!(component.contains("\"shaders/tile.frag.qsb\""));
-    assert!(component.contains("\"shaders/sweep.frag.qsb\""));
     let component = component
         .replace("\"shaders/radar.frag.qsb\"", &shader("radar"))
         .replace("\"shaders/tile.frag.qsb\"", &shader("tile"))
-        .replace("\"shaders/sweep.frag.qsb\"", &shader("sweep"))
         .replacen(
             "id: map\n",
             "id: map\n    property alias shaderItem: radarEffect\n",

@@ -2,7 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "Sites.js" as Sites
+import "Location.js" as Location
 import "Keys.js" as KeyMap
 
 QtObject {
@@ -11,6 +11,7 @@ QtObject {
     // outputs. Visible maps have separate sockets for their tile rectangles.
     property Engine engine: Engine {}
     property Config config: Config {}
+    property Remembered remembered: Remembered {}
     property Theme theme: Theme {}
     property bool windowOpen: false
     property bool initialized: false
@@ -20,40 +21,217 @@ QtObject {
     // key change it, OMASTORM_WEAK outranks the file for captures.
     property var weakFloor: KeyMap.envFloor(Quickshell.env("OMASTORM_WEAK")) !== undefined ? KeyMap.envFloor(Quickshell.env("OMASTORM_WEAK")) : KeyMap.DEFAULT_FLOOR
     property string startupError: ""
-    signal homeRequested()
-    readonly property string homeSite: {
-        if (config.homeSite) return config.homeSite;
-        if (!config.location) return "";
-        var best = "", distance = Infinity;
-        for (var site of engine.sites) {
-            var km = Sites.distanceKm(config.location.lat, config.location.lon, site.lat, site.lon);
-            if (km < distance) { best = site.id; distance = km; }
-        }
-        return best;
+    readonly property bool ready: config.ready && remembered.ready
+    readonly property string persistError: remembered.error ? remembered.error.toUpperCase() : ""
+    property bool hasView: false
+    property bool needsLocation: false
+    property string placeName: ""
+    property string locationSource: ""
+    property real centerLat: 0
+    property real centerLon: 0
+    property real span: Location.DEFAULT_SPAN
+    property string lockId: ""
+    property bool lockWanted: false
+    property string lockSource: ""
+    property string lastConfigLock: ""
+    property bool pendingLocationPicker: false
+    property var appliedExplicit: null
+    signal viewChanged()
+    signal locationPickerRequested()
+
+    function requestLocationPicker() {
+        pendingLocationPicker = true;
+        locationPickerRequested();
     }
-    function returnHome() {
-        if (!engine.state || !config.ready) return;
-        if (homeSite && (engine.state.site.id !== homeSite || engine.state.source !== "live")) {
-            engine.send({type: "select_site", id: homeSite});
-            homeRequested();
+
+    function resolve() {
+        if (!config.ready || !remembered.ready) return;
+        var env = Location.envView(Quickshell.env("OMASTORM_VIEW"));
+        var explicit = Location.configCenter(config.values);
+        var rememberedView = remembered.parsed;
+        var place = Location.resolvePlace(explicit, rememberedView, config.location, env);
+        if (!hasView) {
+            if (place) {
+                needsLocation = false;
+                centerLat = place.lat;
+                centerLon = place.lon;
+                span = Location.clampSpan(place.span);
+                hasView = true;
+                locationSource = place.source;
+                placeName = place.name || "";
+            } else {
+                needsLocation = true;
+                locationSource = "";
+                placeName = "";
+            }
+            applyLaunchLock(rememberedView);
+        }
+        if (explicit) {
+            var same = appliedExplicit && appliedExplicit.lat === explicit.lat && appliedExplicit.lon === explicit.lon;
+            appliedExplicit = explicit;
+            if (hasView && !same) {
+                placeName = "";
+                locationSource = "config";
+                centerLat = explicit.lat;
+                centerLon = explicit.lon;
+                needsLocation = false;
+            }
+        } else {
+            appliedExplicit = null;
+        }
+        applyConfigLockChange();
+        viewChanged();
+    }
+
+    function applyLaunchLock(rememberedView) {
+        var cfg = Location.configLock(config.values);
+        lastConfigLock = cfg;
+        if (cfg) {
+            lockId = cfg;
+            lockWanted = true;
+            lockSource = "config";
+        } else if (rememberedView && rememberedView.lock) {
+            lockId = rememberedView.lock;
+            lockWanted = true;
+            lockSource = "state";
+        } else {
+            lockId = "";
+            lockWanted = false;
+            lockSource = "nearest";
         }
     }
+
+    function applyConfigLockChange() {
+        var cfg = Location.configLock(config.values);
+        if (cfg === lastConfigLock) return;
+        lastConfigLock = cfg;
+        if (cfg) {
+            lockId = cfg;
+            lockWanted = true;
+            lockSource = "config";
+        } else {
+            lockId = remembered.lock || "";
+            lockWanted = !!lockId;
+            lockSource = lockWanted ? "state" : "nearest";
+        }
+    }
+
+    function persist() {
+        if (!hasView) return;
+        remembered.snapshot(centerLat, centerLon, span, lockWanted ? lockId : "", placeName);
+    }
+
+    function rememberView(lat, lon, spanKm) {
+        if (needsLocation) return;
+        if (!Location.validPair(lat, lon)) return;
+        var next = Location.clampSpan(spanKm);
+        if (hasView && centerLat === lat && centerLon === lon && span === next) return;
+        centerLat = lat;
+        centerLon = lon;
+        span = next;
+        hasView = true;
+        persistTimer.restart();
+    }
+
+    function setPlace(lat, lon, name) {
+        if (!Location.validPair(lat, lon)) return;
+        placeName = name || "";
+        locationSource = "state";
+        needsLocation = false;
+        pendingLocationPicker = false;
+        centerLat = lat;
+        centerLon = lon;
+        span = Location.DEFAULT_SPAN;
+        hasView = true;
+        var cfg = Location.configLock(config.values);
+        if (cfg && lockSource === "config") {
+            lockId = cfg;
+            lockWanted = true;
+            lockSource = "config";
+        } else {
+            lockId = "";
+            lockWanted = false;
+            lockSource = "nearest";
+        }
+        persist();
+        applyRadar();
+        viewChanged();
+    }
+
+    function resetView() {
+        var target = Location.resolveReset(Location.configCenter(config.values), config.location);
+        if (target) {
+            centerLat = target.lat;
+            centerLon = target.lon;
+            locationSource = target.source;
+            placeName = target.name || "";
+        } else if (!hasView) {
+            requestLocationPicker();
+            return;
+        }
+        span = Location.DEFAULT_SPAN;
+        hasView = true;
+        persist();
+        applyRadar();
+        viewChanged();
+    }
+
+    function setLock(id, on) {
+        if (on && id) {
+            lockId = id;
+            lockWanted = true;
+            lockSource = "state";
+        } else {
+            lockId = "";
+            lockWanted = false;
+            lockSource = "nearest";
+        }
+        persist();
+        applyRadar();
+    }
+
+    function followNearest(id) {
+        lockId = "";
+        lockWanted = false;
+        lockSource = "nearest";
+        persist();
+        if (!engine.state) return;
+        if (engine.state.site.locked) engine.send({type: "lock", enabled: false});
+        if (!engine.state.site.follow) engine.send({type: "follow", enabled: true});
+        if (id && (engine.state.site.id !== id || engine.state.source !== "live"))
+            engine.send({type: "select_site", id: id});
+    }
+
+    function applyRadar() {
+        if (!engine.state || !ready) return;
+        if (needsLocation) return;
+        if (lockWanted && lockId) {
+            if (engine.state.site.id !== lockId || engine.state.source !== "live")
+                engine.send({type: "select_site", id: lockId});
+            if (!engine.state.site.locked) engine.send({type: "lock", enabled: true});
+            if (!engine.state.site.follow) engine.send({type: "follow", enabled: true});
+        } else {
+            if (engine.state.site.locked) engine.send({type: "lock", enabled: false});
+            if (!engine.state.site.follow) engine.send({type: "follow", enabled: true});
+            if (hasView) engine.send({type: "view_center", lat: centerLat, lon: centerLon});
+        }
+    }
+
     function initialize() {
-        if (initialized || !engine.state || !config.ready) return;
+        if (initialized || !engine.state || !ready) return;
         initialized = true;
-        if (!windowOpen || engine.state.source === "archived") returnHome();
-        applyFollow();
+        resolve();
+        applyRadar();
+        persist();
     }
-    function applyFollow() {
-        if (engine.state && config.follow !== undefined && config.follow !== engine.state.site.follow)
-            engine.send({type: "follow", enabled: config.follow});
-    }
+
     function applyTreatment() {
         var errors = [], wanted = KeyMap.treatment(config.treatment, errors);
         if (!Quickshell.env("OMASTORM_STYLE") && wanted) treatment = wanted;
         if (KeyMap.envFloor(Quickshell.env("OMASTORM_WEAK")) === undefined) weakFloor = KeyMap.weakFloor(config.weakFloor, errors);
     }
-    onHomeSiteChanged: if (initialized) returnHome()
+
+    property Timer persistTimer: Timer { interval: 400; onTriggered: session.persist() }
     property Connections engineEvents: Connections {
         target: session.engine
         function onStateChanged() {
@@ -63,10 +241,15 @@ QtObject {
     }
     property Connections configEvents: Connections {
         target: session.config
-        function onReadyChanged() { session.initialize(); }
-        function onFollowChanged() { session.applyFollow(); }
+        function onReadyChanged() { session.resolve(); session.initialize(); }
+        function onValuesChanged() { if (session.initialized) { session.resolve(); session.applyRadar(); } }
+        function onLocationChanged() { if (!session.hasView) session.resolve(); if (session.initialized) session.applyRadar(); }
         function onTreatmentChanged() { session.applyTreatment(); }
         function onWeakFloorChanged() { session.applyTreatment(); }
+    }
+    property Connections rememberedEvents: Connections {
+        target: session.remembered
+        function onReadyChanged() { session.resolve(); session.initialize(); }
     }
     // The engine bootstrap (run.sh --ensure: install the pinned engine if
     // needed, start or replace the daemon) runs detached, so a plugin reload
@@ -91,5 +274,5 @@ QtObject {
         onFileChanged: reload()
         onLoaded: { var lines = text().trim().split("\n"); session.startupError = session.engine.state ? "" : lines[lines.length - 1]; }
     }
-    Component.onCompleted: { applyTreatment(); bootstrap(); }
+    Component.onCompleted: { applyTreatment(); resolve(); bootstrap(); }
 }

@@ -186,6 +186,23 @@ struct Place {
     class: String,
     rank: u32,
     min_zoom: f64,
+    #[serde(default)]
+    region: String,
+    #[serde(default)]
+    country: String,
+}
+impl Place {
+    fn label(&self) -> Label {
+        Label {
+            name: self.name.clone(),
+            lat: self.lat,
+            lon: self.lon,
+            class: self.class.clone(),
+            rank: self.rank,
+            region: self.region.clone(),
+            country: self.country.clone(),
+        }
+    }
 }
 /// The embedded geography, decoded once on first use.
 pub struct Geography {
@@ -428,6 +445,54 @@ pub fn render(geography: &Geography, key: TileKey) -> io::Result<Vec<u8>> {
     crate::sweep::png(SIZE, SIZE, &compose(&boundaries, &coast, None))
 }
 
+/// Ranked Natural Earth places matching `query` for the location picker.
+/// Word-start matches beat substrings; nearer the optional origin, then
+/// lower rank, win within a tier. Empty or blank queries return nothing.
+pub fn search_places(query: &str, origin: Option<(f64, f64)>, limit: usize) -> Vec<Label> {
+    let needle = query.trim().to_lowercase();
+    if needle.is_empty() || limit == 0 {
+        return Vec::new();
+    }
+    let mut scored: Vec<(u32, f64, u32, &Place)> = Vec::new();
+    for place in &Geography::embedded().places {
+        let name = place.name.to_lowercase();
+        let tier = if word_start(&name, &needle) {
+            0
+        } else if name.contains(&needle) {
+            1
+        } else {
+            continue;
+        };
+        let distance = origin.map_or(0.0, |(lat, lon)| {
+            great_circle_km(lat, lon, place.lat, place.lon)
+        });
+        scored.push((tier, distance, place.rank, place));
+    }
+    scored.sort_by(|a, b| {
+        a.0.cmp(&b.0)
+            .then(a.1.total_cmp(&b.1))
+            .then(a.2.cmp(&b.2))
+            .then(a.3.name.cmp(&b.3.name))
+    });
+    scored
+        .into_iter()
+        .take(limit)
+        .map(|(_, _, _, place)| place.label())
+        .collect()
+}
+
+fn word_start(text: &str, needle: &str) -> bool {
+    text.split(|c: char| !c.is_alphanumeric())
+        .any(|word| !word.is_empty() && word.starts_with(needle))
+}
+
+fn great_circle_km(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    let (p1, p2) = (lat1.to_radians(), lat2.to_radians());
+    let (dp, dl) = ((lat2 - lat1).to_radians(), (lon2 - lon1).to_radians());
+    let h = (dp / 2.0).sin().powi(2) + p1.cos() * p2.cos() * (dl / 2.0).sin().powi(2);
+    2.0 * 6371.0 * h.clamp(0.0, 1.0).sqrt().asin()
+}
+
 /// The places inside a tile that Natural Earth shows by this zoom. A 512 px
 /// tile shows the ground of four 256 px tiles one level deeper, so the data's
 /// `min_zoom` is read against `z + 1`.
@@ -438,13 +503,7 @@ pub fn labels(geography: &Geography, key: TileKey) -> Vec<Label> {
         .iter()
         .filter(|place| place.min_zoom <= f64::from(key.z + 1))
         .filter(|place| frame.contains_lon_lat(place.lon, place.lat))
-        .map(|place| Label {
-            name: place.name.clone(),
-            lat: place.lat,
-            lon: place.lon,
-            class: place.class.clone(),
-            rank: place.rank,
-        })
+        .map(Place::label)
         .collect()
 }
 
@@ -710,6 +769,27 @@ mod tests {
                 .places
                 .iter()
                 .any(|p| p.name == "Oklahoma City" && p.class == "city" && p.rank == 3)
+        );
+    }
+
+    #[test]
+    fn place_search_ranks_word_starts_and_nearer_matches() {
+        let oklahoma = search_places("oklahoma", Some((35.47, -97.52)), 8);
+        assert_eq!(oklahoma[0].name, "Oklahoma City");
+        assert!(
+            oklahoma
+                .iter()
+                .all(|p| p.name.to_lowercase().contains("oklahoma"))
+        );
+        let norman = search_places("norman", None, 4);
+        assert_eq!(norman[0].name, "Norman");
+        assert!(search_places("   ", None, 8).is_empty());
+        assert_eq!(search_places("city", Some((35.47, -97.52)), 3).len(), 3);
+        let jacksonville = search_places("jacksonville", None, 8);
+        let regions: Vec<&str> = jacksonville.iter().map(|p| p.region.as_str()).collect();
+        assert!(
+            regions.contains(&"Florida") && regions.contains(&"North Carolina"),
+            "Jacksonville results name their states: {regions:?}"
         );
     }
 

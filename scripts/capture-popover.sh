@@ -8,7 +8,7 @@ export XDG_RUNTIME_DIR="$scratch/runtime" XDG_CACHE_HOME="$scratch/cache"
 export OMASTORM_ROOT="$PWD" OMASTORM_CONFIG="$scratch/config.toml"
 export QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=basic QT_QUICK_BACKEND=rhi QSG_RHI_BACKEND=opengl
 mkdir -p "$XDG_RUNTIME_DIR" review
-printf 'home_site = "KTLX"\n' > "$OMASTORM_CONFIG"
+jq -r '.sites[] | select(.id=="KTLX") | "center_lat = \(.lat)\ncenter_lon = \(.lon)\nlocked_radar = \"KTLX\""' engine/data/sites.json > "$OMASTORM_CONFIG"
 pid=
 cleanup() {
   [[ -z $pid ]] || kill "$pid" 2>/dev/null || true

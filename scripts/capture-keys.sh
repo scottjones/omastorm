@@ -13,7 +13,7 @@ export QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=basic QT_QUICK_BACKEND=rhi
 review="$PWD/review"
 rm -f "$review"/keys-*.png
 scratch=$(mktemp -d /tmp/omastorm-keys.XXXXXX)
-printf 'home_site = "KTLX"\n' > "$scratch/home.toml"
+jq -r '.sites[] | select(.id=="KTLX") | "center_lat = \(.lat)\ncenter_lon = \(.lon)\nlocked_radar = \"KTLX\""' engine/data/sites.json > "$scratch/home.toml"
 : > "$scratch/none.toml"
 printf '{\n  "name": "Stokesdale",\n  "latitude": 36.23708,\n  "longitude": -79.97948\n}\n' > "$scratch/weather.json"
 bash scripts/cargo.sh build --offline --locked --quiet
@@ -25,7 +25,7 @@ tell '{"type":"select_site","id":"KTLX"}' '{"type":"lock","enabled":false}'
 capture() { # name, delay ms, config, location, ipc steps...
   local name=$1 delay=$2 config=$3 location=$4 pid
   shift 4
-  OMASTORM_CONFIG="$config" OMASTORM_LOCATION="$location" OMASTORM_WIDTH=960 OMASTORM_HEIGHT=680 \
+  OMASTORM_CONFIG="$config" OMASTORM_LOCATION="$location" OMASTORM_STATE="$scratch/state-$name.json" OMASTORM_WIDTH=960 OMASTORM_HEIGHT=680 \
     OMASTORM_CAPTURE_DELAY="$delay" OMASTORM_CAPTURE="$review/keys-$name.png" bash run.sh > /dev/null 2>&1 &
   pid=$!
   for _ in {1..100}; do quickshell ipc --pid "$pid" call keys status > /dev/null 2>&1 && break; sleep .1; done

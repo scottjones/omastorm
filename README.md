@@ -68,13 +68,16 @@ Update with `omarchy plugin update com.omastorm.radar`.
 
 ## Use
 
-Click the mark in the bar for the popover: the home station, LIVE or the
-connection condition, the actual scan time, step and play, and EXPAND. Click
-the radar or press Enter for the window; it opens on the same station and
-frame. Closing the window returns to home.
+Click the mark in the bar for the popover: the map at your location, LIVE or
+the connection condition, the actual scan time, step and play, and EXPAND.
+If no location is known, the popover offers “Choose a location,” which opens
+the picker in the window. Click the radar or press Enter for the window; it
+opens on the same station, frame, and camera. Closing the window leaves that
+view in place for the next open.
 
 In the window, drag to pan and scroll to zoom. The map follows the nearest
-station as you pan unless you lock it. A station you arrive at fetches its last
+station as you pan unless you lock it; a locked radar stays put even when
+the camera leaves its coverage. A station you arrive at fetches its last
 dozen scans, so there is a loop to play within a few seconds; the cache then
 grows to 60 as new scans arrive. The status slot shows the age of the frame on
 screen: LIVE, STALE after ten minutes, UNAVAILABLE or OFFLINE when the feed
@@ -84,11 +87,11 @@ cannot be reached, with cached frames kept.
 | --- | --- |
 | `h` `j` `k` `l` or arrows | Pan |
 | `+` `-` | Zoom |
-| `0` | Home view |
+| `0` | Reset to the configured or weather location |
 | `/` or `s` | Search sites |
 | `n` | Nearest site |
 | `Shift+L` | Lock the station |
-| `Shift+H` | Save the station as home |
+| `Shift+H` | Choose a location |
 | `Space` | Loop the frames |
 | `[` `]` | Step a frame |
 | `Home` `End` | Oldest or newest frame |
@@ -102,15 +105,19 @@ are hidden by default and the legend says so; `w` shows them.
 
 ## Configuration
 
-`~/.config/omastorm/config.toml` is optional. Without `home_site` the home is
-the station nearest the location Omarchy's weather panel is set to. `Shift+H`,
-or the HOME button, saves the station on screen as `home_site`.
+`~/.config/omastorm/config.toml` is optional. The map centre is an explicit
+`center_lat`/`center_lon`, else the last camera in
+`~/.local/state/omastorm/state.json`, else Omarchy's weather location, else
+the location picker. `Shift+H`, or LOCATION, opens that picker; it writes
+state, not config. `locked_radar` pins a station; otherwise the map follows
+the nearest radar.
 
 ```toml
-home_site = "KTLX"   # a station id; omit to use Omarchy's weather location
-follow = true        # follow the nearest station while panning
-treatment = "GLYPHS" # PIXELS, GLYPHS, or STIPPLE at launch
-weak_floor = 5       # dBZ; false draws every measured return
+center_lat = 35.468   # with center_lon, the map centre on every launch
+center_lon = -97.521
+locked_radar = "KTLX" # pin this station; omit to follow the nearest
+treatment = "GLYPHS"  # PIXELS, GLYPHS, or STIPPLE at launch
+weak_floor = 5        # dBZ; false draws every measured return
 
 [keys]
 pan_left = "h Left"
