@@ -23,6 +23,10 @@ QtObject {
     property string startupError: ""
     readonly property bool ready: config.ready && remembered.ready
     readonly property string persistError: remembered.error ? remembered.error.toUpperCase() : ""
+    // The view (DESIGN.md, location): the camera and where its centre came
+    // from. `locationSource` is `config`, `state`, `weather`, or `view`
+    // (OMASTORM_VIEW) once a centre is known; `needsLocation` is the
+    // onboarding state, true only while no source supplies one.
     property bool hasView: false
     property bool needsLocation: false
     property string placeName: ""
@@ -30,8 +34,11 @@ QtObject {
     property real centerLat: 0
     property real centerLon: 0
     property real span: Location.DEFAULT_SPAN
+    // The radar lock: the station pinned against hand-offs, or none while
+    // the nearest station follows the centre, and who asked for it:
+    // `config` (locked_radar), `state` (a session choice, remembered), or
+    // `nearest` when there is none.
     property string lockId: ""
-    property bool lockWanted: false
     property string lockSource: ""
     property string lastConfigLock: ""
     property bool pendingLocationPicker: false
@@ -44,38 +51,53 @@ QtObject {
         locationPickerRequested();
     }
 
+    // Every way a centre is chosen lands here: the camera, its span, and the
+    // provenance the header names. A placed view ends onboarding.
+    function placeView(lat, lon, spanKm, source, name) {
+        centerLat = lat;
+        centerLon = lon;
+        span = Location.clampSpan(spanKm);
+        hasView = true;
+        needsLocation = false;
+        locationSource = source;
+        placeName = name || "";
+    }
+
+    // The lock as one move: a station pins the radar and `source` says who
+    // asked; an empty id releases it to the nearest station.
+    function holdLock(id, source) {
+        lockId = id || "";
+        lockSource = lockId ? source : "nearest";
+    }
+
+    // Launch and a change to config.toml resolve the lock the same way: a
+    // configured lock wins, else the remembered one, else nearest.
+    function resolveLock(rememberedLock) {
+        lastConfigLock = Location.configLock(config.values);
+        holdLock(lastConfigLock || rememberedLock, lastConfigLock ? "config" : "state");
+    }
+
     function resolve() {
-        if (!config.ready || !remembered.ready) return;
+        if (!ready) return;
         var env = Location.envView(Quickshell.env("OMASTORM_VIEW"));
         var explicit = Location.configCenter(config.values);
         var rememberedView = remembered.parsed;
-        var place = Location.resolvePlace(explicit, rememberedView, config.location, env);
         if (!hasView) {
-            if (place) {
-                needsLocation = false;
-                centerLat = place.lat;
-                centerLon = place.lon;
-                span = Location.clampSpan(place.span);
-                hasView = true;
-                locationSource = place.source;
-                placeName = place.name || "";
-            } else {
+            var place = Location.resolvePlace(explicit, rememberedView, config.location, env);
+            if (place) placeView(place.lat, place.lon, place.span, place.source, place.name);
+            else {
                 needsLocation = true;
                 locationSource = "";
                 placeName = "";
             }
-            applyLaunchLock(rememberedView);
+            resolveLock(rememberedView.lock);
         }
+        // An explicit centre applies again whenever it changes, over any view
+        // the session has; removing it leaves the camera where it is.
         if (explicit) {
             var same = appliedExplicit && appliedExplicit.lat === explicit.lat && appliedExplicit.lon === explicit.lon;
             appliedExplicit = explicit;
-            if (hasView && !same) {
-                placeName = "";
-                locationSource = "config";
-                centerLat = explicit.lat;
-                centerLon = explicit.lon;
-                needsLocation = false;
-            }
+            if (hasView && !same) placeView(explicit.lat, explicit.lon, span, "config", "");
         } else {
             appliedExplicit = null;
         }
@@ -83,42 +105,14 @@ QtObject {
         viewChanged();
     }
 
-    function applyLaunchLock(rememberedView) {
-        var cfg = Location.configLock(config.values);
-        lastConfigLock = cfg;
-        if (cfg) {
-            lockId = cfg;
-            lockWanted = true;
-            lockSource = "config";
-        } else if (rememberedView && rememberedView.lock) {
-            lockId = rememberedView.lock;
-            lockWanted = true;
-            lockSource = "state";
-        } else {
-            lockId = "";
-            lockWanted = false;
-            lockSource = "nearest";
-        }
-    }
-
     function applyConfigLockChange() {
-        var cfg = Location.configLock(config.values);
-        if (cfg === lastConfigLock) return;
-        lastConfigLock = cfg;
-        if (cfg) {
-            lockId = cfg;
-            lockWanted = true;
-            lockSource = "config";
-        } else {
-            lockId = remembered.lock || "";
-            lockWanted = !!lockId;
-            lockSource = lockWanted ? "state" : "nearest";
-        }
+        if (Location.configLock(config.values) === lastConfigLock) return;
+        resolveLock(remembered.lock);
     }
 
     function persist() {
         if (!hasView) return;
-        remembered.snapshot(centerLat, centerLon, span, lockWanted ? lockId : "", placeName);
+        remembered.snapshot(centerLat, centerLon, span, lockId, placeName);
     }
 
     function rememberView(lat, lon, spanKm) {
@@ -133,26 +127,13 @@ QtObject {
         persistTimer.restart();
     }
 
+    // A place from the location picker: the default span, a configured lock
+    // kept, any other lock released (DESIGN.md, location).
     function setPlace(lat, lon, name) {
         if (!Location.validPair(lat, lon)) return;
-        placeName = name || "";
-        locationSource = "state";
-        needsLocation = false;
         pendingLocationPicker = false;
-        centerLat = lat;
-        centerLon = lon;
-        span = Location.DEFAULT_SPAN;
-        hasView = true;
-        var cfg = Location.configLock(config.values);
-        if (cfg && lockSource === "config") {
-            lockId = cfg;
-            lockWanted = true;
-            lockSource = "config";
-        } else {
-            lockId = "";
-            lockWanted = false;
-            lockSource = "nearest";
-        }
+        placeView(lat, lon, Location.DEFAULT_SPAN, "state", name);
+        holdLock(lockSource === "config" ? Location.configLock(config.values) : "", "config");
         persist();
         viewChanged();
         applyRadar();
@@ -160,59 +141,37 @@ QtObject {
 
     function resetView() {
         var target = Location.resolveReset(Location.configCenter(config.values), config.location);
-        if (target) {
-            centerLat = target.lat;
-            centerLon = target.lon;
-            locationSource = target.source;
-            placeName = target.name || "";
-        } else if (!hasView) {
+        if (target) placeView(target.lat, target.lon, Location.DEFAULT_SPAN, target.source, target.name);
+        else if (!hasView) {
             requestLocationPicker();
             return;
-        }
-        span = Location.DEFAULT_SPAN;
-        hasView = true;
+        } else span = Location.DEFAULT_SPAN;
         persist();
         viewChanged();
         applyRadar();
     }
 
+    // A station from the site picker: locked and centred, the span kept.
     function chooseRadar(id, lat, lon, name) {
         lat = Number(lat);
         lon = Number(lon);
         if (!id || !Location.validPair(lat, lon)) return;
-        placeName = name || id;
-        locationSource = "state";
-        needsLocation = false;
         pendingLocationPicker = false;
-        centerLat = lat;
-        centerLon = lon;
-        hasView = true;
-        lockId = id;
-        lockWanted = true;
-        lockSource = "state";
+        placeView(lat, lon, span, "state", name || id);
+        holdLock(id, "state");
         persist();
         viewChanged();
         applyRadar();
     }
 
     function setLock(id, on) {
-        if (on && id) {
-            lockId = id;
-            lockWanted = true;
-            lockSource = "state";
-        } else {
-            lockId = "";
-            lockWanted = false;
-            lockSource = "nearest";
-        }
+        holdLock(on ? id : "", "state");
         persist();
         applyRadar();
     }
 
     function followNearest(id) {
-        lockId = "";
-        lockWanted = false;
-        lockSource = "nearest";
+        holdLock("");
         persist();
         if (!engine.state) return;
         if (engine.state.site.locked) engine.send({type: "lock", enabled: false});
@@ -221,17 +180,19 @@ QtObject {
             engine.send({type: "select_site", id: id});
     }
 
+    // Reconcile the engine with the lock and the view: only what differs is
+    // sent, so a repeat changes nothing (docs/protocol.md, commands).
     function applyRadar() {
-        if (!engine.state || !ready) return;
-        if (needsLocation) return;
-        if (lockWanted && lockId) {
-            if (engine.state.site.id !== lockId || engine.state.source !== "live")
+        if (!engine.state || !ready || needsLocation) return;
+        var site = engine.state.site;
+        if (lockId) {
+            if (site.id !== lockId || engine.state.source !== "live")
                 engine.send({type: "select_site", id: lockId});
-            if (!engine.state.site.locked) engine.send({type: "lock", enabled: true});
-            if (!engine.state.site.follow) engine.send({type: "follow", enabled: true});
+            if (!site.locked) engine.send({type: "lock", enabled: true});
+            if (!site.follow) engine.send({type: "follow", enabled: true});
         } else {
-            if (engine.state.site.locked) engine.send({type: "lock", enabled: false});
-            if (!engine.state.site.follow) engine.send({type: "follow", enabled: true});
+            if (site.locked) engine.send({type: "lock", enabled: false});
+            if (!site.follow) engine.send({type: "follow", enabled: true});
             if (hasView) engine.send({type: "view_center", lat: centerLat, lon: centerLon});
         }
     }

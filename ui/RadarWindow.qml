@@ -205,7 +205,13 @@ Item {
         if (!session && KeyMap.envFloor(Quickshell.env("OMASTORM_WEAK")) === undefined) weakFloor = floor;
     }
     Component.onCompleted: applySettings()
-    readonly property bool overlayOpen: picker.open || locationPicker.open || sheet.open
+    // The overlay that is up (DESIGN.md, picker and keys): the keys sheet,
+    // the location picker, the site picker, or the treatment menu, else
+    // none. Each owns its card and handles its own keys; the window's
+    // shortcuts stand down while one is up, except that the menu leaves the
+    // treatment keys to choose.
+    readonly property string overlay: sheet.open ? "sheet" : locationPicker.open ? "location"
+        : picker.open ? "picker" : treatmentMenu.opened ? "menu" : ""
     function run(action) {
         switch (action) {
         case "search": treatmentMenu.close(); picker.show(""); break;
@@ -421,15 +427,13 @@ Item {
           anchors.fill: parent
           color: app.theme.background
           // One Shortcut per action with the bindings in force (Keys.js has
-          // the defaults). While the picker or the sheet is open its card
-          // has the keyboard and every window shortcut stands down; while
-          // the treatment menu is open the treatment keys still choose and
-          // the menu itself takes Escape.
+          // the defaults), live while no overlay is up; the treatment menu
+          // alone leaves its own keys live and takes Escape itself.
           Instantiator {
             model: KeyMap.ACTIONS.map(a => a.id)
             delegate: Shortcut {
                 sequences: app.bindings[modelData] || []
-                enabled: app.opened && !app.overlayOpen && (!treatmentMenu.opened || modelData === "pixels" || modelData === "glyphs" || modelData === "stipple")
+                enabled: app.opened && (app.overlay === "" || app.overlay === "menu" && KeyMap.TREATMENTS.indexOf(modelData.toUpperCase()) >= 0)
                 onActivated: app.run(modelData)
             }
           }
