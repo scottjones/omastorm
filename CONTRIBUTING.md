@@ -58,7 +58,11 @@ and no remembered view, so the location picker shows.
 ## Verify and submit
 
 Keep each change scoped to one issue. Run `mise check` before every commit;
-it uses a scratch daemon and leaves the shared daemon alone.
+it uses scratch daemons and leaves the shared daemon alone. Cargo runs
+first, then the Rust tests run alongside the UI checks, which proceed in two
+lanes. Scratch and logs live under `target/check/`, never `/tmp`; the daemons
+and runtime files go on every exit, and the logs stay until the next run.
+The checks read `target/debug/`, so leave `CARGO_TARGET_DIR` unset.
 
 For shader, sampling, or camera changes, also run `mise check --gpu` and
 `bash scripts/capture-review.sh`, inspect the images in `review/`, and include

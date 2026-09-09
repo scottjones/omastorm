@@ -6,7 +6,9 @@ cd "$(dirname "$0")/.."
 
 fail() { printf '%s\n' "$@" >&2; exit 1; }
 
-scratch=$(mktemp -d /tmp/omastorm-link.XXXXXX)
+scratch=$PWD/target/check-link-plugin
+rm -rf "$scratch"
+mkdir -p "$scratch"
 trap 'rm -rf "$scratch"' EXIT
 export XDG_CONFIG_HOME="$scratch/config"
 plugins=$XDG_CONFIG_HOME/omarchy/plugins

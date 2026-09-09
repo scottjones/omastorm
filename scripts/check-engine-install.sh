@@ -12,7 +12,11 @@ cd "$(dirname "$0")/.."
 fail() { printf '%s\n' "$@" >&2; exit 1; }
 [[ -x target/debug/omastorm-engine ]] || fail 'Need target/debug/omastorm-engine (check.sh builds it).'
 
-scratch=$(mktemp -d /tmp/omastorm-engine-install.XXXXXX)
+# Several copies of the debug engine and a tree of HEAD: under target/, and
+# gone on exit, pass or fail.
+scratch=$PWD/target/check-engine-install
+rm -rf "$scratch"
+mkdir -p "$scratch"
 trap 'rm -rf "$scratch"' EXIT
 export XDG_DATA_HOME="$scratch/data" XDG_CACHE_HOME="$scratch/cache" XDG_RUNTIME_DIR="$scratch/runtime"
 mkdir -p "$XDG_RUNTIME_DIR"

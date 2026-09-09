@@ -3,7 +3,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p review
-scratch=$(mktemp -d /tmp/omastorm-popover.XXXXXX)
+scratch=$PWD/target/check-popover
+rm -rf "$scratch"
+mkdir -p "$scratch"
 export XDG_RUNTIME_DIR="$scratch/runtime" XDG_CACHE_HOME="$scratch/cache"
 export QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=basic QT_QUICK_BACKEND=rhi QSG_RHI_BACKEND=opengl
 export OMASTORM_CONFIG="$scratch/config.toml"
@@ -16,6 +18,8 @@ pid=
 cleanup() {
   [[ -z $pid ]] || kill "$pid" 2>/dev/null || true
   target/debug/omastorm-engine stop >/dev/null 2>&1 || true
+  # The textures and the seeded frame ring go; ui.log stays for reading.
+  rm -rf "$scratch/runtime" "$scratch/cache"
 }
 trap cleanup EXIT
 quickshell -p ui/PopoverHarness.qml > "$scratch/ui.log" 2>&1 &
