@@ -43,10 +43,11 @@ mise plugin-link
 ```
 
 That replaces the install directory with a symlink to this checkout (the
-previous clone is kept beside it), reloads the running shell plugin, and
+previous clone is kept beside it), restarts the Omarchy shell, and
 enables the bar widget.
-After that, `mise start`, `mise restart`, and `mise onboard` also reload the
-bar widget so the popover matches this tree. `mise onboard`'s empty weather
+After that, `mise start`, `mise restart`, and `mise onboard` also restart the
+shell so the popover matches this tree (a symlink skips the plugin file
+watcher, and `rescanPlugins` keeps the old QML). `mise onboard`'s empty weather
 and state files apply only to the window; the popover keeps its usual place
 files. `mise plugin-unlink` restores the clone. A tty launch prints the qml path,
 live vs archive, whether the bar is linked, and which config/state/place

@@ -51,28 +51,37 @@ case $* in
 esac
 exit 0
 EOF
-chmod +x -- "$scratch/bin/omarchy-shell"
-export PATH="$scratch/bin:$PATH" OMASTORM_SHELL_LOG="$scratch/ipc.log"
+cat > "$scratch/bin/omarchy" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${OMASTORM_OMARCHY_LOG:?}"
+exit 0
+EOF
+chmod +x -- "$scratch/bin/omarchy-shell" "$scratch/bin/omarchy"
+export PATH="$scratch/bin:$PATH" OMASTORM_SHELL_LOG="$scratch/ipc.log" \
+  OMASTORM_OMARCHY_LOG="$scratch/omarchy.log"
 : > "$OMASTORM_SHELL_LOG"
+: > "$OMASTORM_OMARCHY_LOG"
 
 bash scripts/link-plugin.sh --rescan
 [[ ! -s $OMASTORM_SHELL_LOG ]] || fail 'unlinked --rescan talked to omarchy-shell'
+[[ ! -s $OMASTORM_OMARCHY_LOG ]] || fail 'unlinked --rescan talked to omarchy'
 
 bash scripts/link-plugin.sh
 [[ -L $target ]] || fail 'link did not create a symlink'
 [[ $(readlink -f "$target") == "$root" ]] || fail "link points at $(readlink -f "$target")"
 [[ ! -e $backup ]] || fail 'link without a clone wrote a backup'
-rg -q 'rescanPlugins' "$OMASTORM_SHELL_LOG" || fail 'link did not rescan the shell plugin'
+rg -q '^restart shell$' "$OMASTORM_OMARCHY_LOG" || fail 'link did not restart the shell'
 rg -q 'enablePlugin com.omastorm.radar \{\}' "$OMASTORM_SHELL_LOG" \
   || fail 'link did not enable the shell plugin'
 status=$(bash scripts/link-plugin.sh --status)
 [[ $status == 'this checkout (linked)' ]] || fail "linked --status: $status"
 
 : > "$OMASTORM_SHELL_LOG"
+: > "$OMASTORM_OMARCHY_LOG"
 bash scripts/link-plugin.sh
 [[ -L $target ]] || fail 'second link dropped the symlink'
 [[ ! -e $backup ]] || fail 'second link invented a backup'
-rg -q 'rescanPlugins' "$OMASTORM_SHELL_LOG" || fail 'second link did not rescan'
+rg -q '^restart shell$' "$OMASTORM_OMARCHY_LOG" || fail 'second link did not restart the shell'
 rg -q 'enablePlugin com.omastorm.radar \{\}' "$OMASTORM_SHELL_LOG" \
   || fail 'second link did not enable the shell plugin'
 
@@ -121,4 +130,4 @@ fi
 rg -q 'not this checkout' "$scratch/other.err" \
   || fail "foreign-symlink error was unclear: $(cat "$scratch/other.err")"
 
-echo 'Link-plugin: scratch symlink, backup/restore, gated rescan, no install/launch write PASS'
+echo 'Link-plugin: scratch symlink, backup/restore, gated shell restart, no install/launch write PASS'

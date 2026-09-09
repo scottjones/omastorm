@@ -49,8 +49,8 @@ if [[ -t 1 ]]; then
   printf 'Omastorm %s\n  qml    %s\n  engine %s\n  bar    %s\n  config %s\n  state  %s\n  place  %s\n' \
     "$PWD" "${OMASTORM_QML:-ui/shell.qml}" "$mode" "$bar" "$config" "$state" "$location"
 fi
-# mise start / restart / onboard reload the bar widget when this checkout is
-# linked. Captures and checks leave the running shell alone.
+# mise start / restart / onboard restart the Omarchy shell when this checkout
+# is linked, so the bar popover matches. Captures and checks leave it alone.
 if [[ -n ${OMASTORM_RESCAN_PLUGIN:-} ]]; then
   bash scripts/link-plugin.sh --rescan
 fi

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Point the Omarchy bar plugin at this checkout, or restore the clone.
 # Ordinary install and launch never call this; mise plugin-link / plugin-unlink do.
-# --rescan reloads the running shell plugin when this checkout is linked.
+# --rescan restarts the Omarchy shell when this checkout is linked, so the bar
+# drops cached QML (inotify and rescanPlugins do not follow the symlink).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -28,8 +29,15 @@ shell_up() {
 }
 
 rescan() {
+  command -v omarchy >/dev/null 2>&1 || return 0
   shell_up || return 0
-  omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
+  # rescanPlugins leaves the popover on the QML loaded before the symlink.
+  omarchy restart shell >/dev/null 2>&1 || true
+  local i
+  for (( i = 0; i < 50; i++ )); do
+    shell_up && return 0
+    sleep 0.1
+  done
 }
 
 enable() {
