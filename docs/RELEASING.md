@@ -75,6 +75,12 @@ published asset is wrong, leave the pin unchanged and release a new version.
 
 ### CI release route
 
+Ubuntu runners execute the newly built native candidates. They verify installation
+and checksums for the existing published pin with `--published-install-only`: the
+Arch-built engine-0.1.2 x86 asset requires glibc 2.44, newer than Ubuntu 24.04.
+Normal desktop checks still require the pinned binary to run. Building future
+releases on Ubuntu also avoids inheriting the build machine's newer Arch glibc.
+
 `.github/workflows/engine.yml` runs the mise toolchain's lint, Rust tests,
 installer checks, and release checks on native `ubuntu-24.04` x86_64 and
 `ubuntu-24.04-arm` aarch64 runners. Every native candidate must answer hello

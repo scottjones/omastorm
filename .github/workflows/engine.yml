@@ -61,7 +61,7 @@ jobs:
         run: |
           mise lint
           mise test
-          bash -x scripts/check-engine-install.sh > target/install-check.log 2>&1 || { cat target/install-check.log; exit 1; }
+          bash -x scripts/check-engine-install.sh --published-install-only > target/install-check.log 2>&1 || { cat target/install-check.log; exit 1; }
           bash scripts/check-engine-release.sh
       - name: Build native release binary
         run: |
