@@ -42,7 +42,9 @@ fn scratch_root(name: &str) -> PathBuf {
     ));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
-    root
+    // Remove engine/.. before adding the socket suffix: Unix socket paths
+    // have a small byte limit, especially in nested PR worktrees.
+    fs::canonicalize(root).unwrap()
 }
 /// Connect once the daemon under `root` listens, within `STARTUP`; `alive`
 /// fails early when the daemon has already exited.
@@ -585,10 +587,10 @@ fn a_lean_start_has_no_frame_until_a_site_is_selected() {
 
 #[test]
 fn launcher_retries_a_slow_hello_within_its_startup_budget() {
+    let _serial = serial();
     let engine = Engine::start();
     let hello = read(&mut engine.connect());
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join(format!("../target/slow-hello-{}", std::process::id()));
+    let root = scratch_root("hello");
     let dir = root.join("omastorm");
     fs::create_dir_all(&dir).unwrap();
     let lock = fs::File::create(dir.join("engine.lock")).unwrap();

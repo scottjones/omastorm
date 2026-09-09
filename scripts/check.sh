@@ -38,10 +38,10 @@ child=
 cleanup() {
   for pid in "${lanes[@]}"; do kill "$pid" 2> /dev/null; done
   wait 2> /dev/null
-  for runtime in "$scratch"/runtime-*; do
+  for runtime in "$scratch"/r-*; do
     [[ -d $runtime ]] && XDG_RUNTIME_DIR=$runtime target/debug/omastorm-engine stop > /dev/null 2>&1
   done
-  rm -rf "$scratch"/runtime-* "$scratch/tmp"
+  rm -rf "$scratch"/r-* "$scratch/tmp"
 }
 trap cleanup EXIT
 trap 'kill "${child:-}" 2> /dev/null; exit 130' INT TERM
@@ -62,7 +62,8 @@ step() { # name, command...: one line per step; the output goes to its log
 }
 lane() { # name, checks...: the checks in order, sharing one scratch daemon
   local rc=0
-  export XDG_RUNTIME_DIR=$scratch/runtime-$1
+  # Leave room for Quickshell’s socket suffix in nested worktrees.
+  export XDG_RUNTIME_DIR=$scratch/r-$1
   shift
   mkdir -p "$XDG_RUNTIME_DIR"
   trap 'kill "${child:-}" 2> /dev/null; exit 143' TERM

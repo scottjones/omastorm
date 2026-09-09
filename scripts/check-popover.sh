@@ -6,7 +6,7 @@ mkdir -p review
 scratch=$PWD/target/check-popover
 rm -rf "$scratch"
 mkdir -p "$scratch"
-export XDG_RUNTIME_DIR="$scratch/runtime" XDG_CACHE_HOME="$scratch/cache"
+export XDG_RUNTIME_DIR="$scratch/r" XDG_CACHE_HOME="$scratch/cache"
 export QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=basic QT_QUICK_BACKEND=rhi QSG_RHI_BACKEND=opengl
 export OMASTORM_CONFIG="$scratch/config.toml"
 export OMASTORM_STATE="$scratch/state.json"
@@ -19,7 +19,7 @@ cleanup() {
   [[ -z $pid ]] || kill "$pid" 2>/dev/null || true
   target/debug/omastorm-engine stop >/dev/null 2>&1 || true
   # The textures and the seeded frame ring go; ui.log stays for reading.
-  rm -rf "$scratch/runtime" "$scratch/cache"
+  rm -rf "$scratch/r" "$scratch/cache"
 }
 trap cleanup EXIT
 quickshell -p ui/PopoverHarness.qml > "$scratch/ui.log" 2>&1 &
@@ -73,8 +73,8 @@ sql = []
   f['scanTime'] = "2013-05-20T20:#{10+i*5}:00Z"
   f['sweepEnd'] = f['scanTime']
   tex = "KTLX/test-#{i}-sweep.png"; lut = "KTLX/test-#{i}-lut.png"
-  FileUtils.cp("#{scratch}/runtime/omastorm/#{frame['texture']}", "#{dir}/#{tex}")
-  FileUtils.cp("#{scratch}/runtime/omastorm/#{frame['azimuthLut']}", "#{dir}/#{lut}")
+  FileUtils.cp("#{scratch}/r/omastorm/#{frame['texture']}", "#{dir}/#{tex}")
+  FileUtils.cp("#{scratch}/r/omastorm/#{frame['azimuthLut']}", "#{dir}/#{lut}")
   f['texture'] = ''; f['azimuthLut'] = ''
   values = [f['id'], 'KTLX', 'REF', f['elevationDeg'], 1369080600000+i*300000,
             f['scanTime'], f['sweepEnd'], 'synthetic popover lifecycle test', 0, JSON.generate(f), tex, lut]
