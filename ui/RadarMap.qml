@@ -160,9 +160,17 @@ Item {
     onViewCenterXChanged: { settle.restart(); Qt.callLater(refreshOverlay); }
     onViewCenterYChanged: { settle.restart(); Qt.callLater(refreshOverlay); }
     onUnitsPerPixelChanged: settle.restart()
-    // A state change re-asks even for an unchanged rectangle: a restarted
-    // engine publishes under a new generation.
-    onScanChanged: { scheduleLayout(); if (scan) { settle.reask = true; settle.restart(); } else { reportedLat = NaN; reportedSpan = NaN; } }
+    // The first frame after none (launch, a reconnect) re-asks even for an
+    // unchanged rectangle, since a restarted engine publishes under a new
+    // generation, and reports the centre again. A frame arriving on a
+    // standing connection asks for nothing: tiles ride the camera, and the
+    // engine broadcasts once a second while live.
+    onScanChanged: {
+        scheduleLayout();
+        if (scan) { if (settle.reask) settle.restart(); return; }
+        settle.reask = true;
+        reportedLat = NaN; reportedLon = NaN; reportedSpan = NaN;
+    }
     Timer { id: settle; interval: 120; property bool reask: true; onTriggered: { map.requestTiles(); map.reportCenter(); } }
     // Forgotten when the engine goes away, so a reconnect reports the centre
     // the camera is at rather than the one the old daemon knew.
@@ -200,7 +208,8 @@ Item {
         var old = tiles[key];
         tiles[key] = { set: tile.set, path: tile.path, labels: tile.labels,
                        ready: !!old && old.path === tile.path && old.ready };
-        rebuildTileModel();
+        // A request is answered tile by tile in one burst; one rebuild serves it.
+        Qt.callLater(rebuildTileModel);
     }
     // Keep delegates for tiles that stay, so a pan or a re-announcement never
     // recreates an Image that is already on screen.

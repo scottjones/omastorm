@@ -345,7 +345,12 @@ onboarding, and validation are in [configuration.md](configuration.md).
 ## Implementation notes
 
 The shell session keeps a status connection; each visible popover and expanded
-window has its own connection so tile requests remain independent. Expand
+window has its own connection so tile requests remain independent. A map asks
+for its tile rectangle when its camera settles, and again when its connection's
+first `state` arrives after none, since a restarted engine publishes under a
+new generation; a broadcast on a standing connection is not a reason to ask,
+and the UI rebuilds its swatches, ticks, and overlay only when `frame` or
+`timeline` changed, not for the once-a-second `ageSeconds` tick. Expand
 uses the shared station, frame, and play state directly, sending no
 select/seek/play commands, and preserves the map center and zoom. Closing
 preserves the view rather than selecting another station. The session owns
