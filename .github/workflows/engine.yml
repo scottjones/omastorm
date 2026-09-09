@@ -38,6 +38,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential cmake pkg-config binutils socat unzip
       - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/debug
+            target/${{ matrix.arch }}-unknown-linux-gnu
+          key: rust-${{ matrix.arch }}-${{ hashFiles('Cargo.lock', 'mise.toml') }}-${{ github.sha }}
+          restore-keys: rust-${{ matrix.arch }}-${{ hashFiles('Cargo.lock', 'mise.toml') }}-
       - name: Verify engine tag
         run: |
           version=$(awk -F'"' '/^version = /{print $2; exit}' engine/Cargo.toml)
@@ -52,7 +61,7 @@ jobs:
         run: |
           mise lint
           mise test
-          bash scripts/check-engine-install.sh
+          bash -x scripts/check-engine-install.sh > target/install-check.log 2>&1 || { cat target/install-check.log; exit 1; }
           bash scripts/check-engine-release.sh
       - name: Build native release binary
         run: |

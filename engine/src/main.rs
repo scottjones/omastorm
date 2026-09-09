@@ -1608,8 +1608,20 @@ fn handshake(dir: &Path) -> io::Result<Option<Handshake>> {
 /// reconnect within a second, while refusing it left the launch key dead
 /// after every rebuild until a manual `stop`.
 fn ready(dir: &Path) -> io::Result<bool> {
-    let Some(handshake) = handshake(dir)? else {
-        return Ok(false);
+    let handshake = match handshake(dir) {
+        Ok(Some(handshake)) => handshake,
+        Ok(None) => return Ok(false),
+        // The socket can accept before a busy daemon gets to its writer.
+        // Let ensure's overall deadline govern readiness, not one probe.
+        Err(e)
+            if matches!(
+                e.kind(),
+                io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+            ) =>
+        {
+            return Ok(false);
+        }
+        Err(e) => return Err(e),
     };
     if handshake.v != VERSION || handshake.build != build_id() {
         terminate(dir, handshake.pid)?;
@@ -1679,12 +1691,15 @@ fn ensure(dir: PathBuf) -> io::Result<()> {
         .create(true)
         .append(true)
         .open(dir.join("engine.log"))?;
-    let mut child = Process::new(env::current_exe()?)
-        .arg("serve")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(log)
-        .spawn()?;
+    let spawn = || -> io::Result<std::process::Child> {
+        Process::new(env::current_exe()?)
+            .arg("serve")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(log.try_clone()?)
+            .spawn()
+    };
+    let mut child = spawn()?;
     // Startup opens the caches and publishes a blank frame (an archived
     // development volume adds about 0.3 s; timings go to engine.log). Allow
     // far more than that, so a slow disk or a busy machine gets a slow
@@ -1694,7 +1709,11 @@ fn ensure(dir: PathBuf) -> io::Result<()> {
         if ready(&dir)? {
             return Ok(());
         }
-        let _ = child.try_wait()?; // A concurrent launcher may have won the lock.
+        // A concurrent launcher may have won the lock. If a later probe
+        // retired a stale daemon, start again after its lock is released.
+        if child.try_wait()?.is_some() && lock_is_free(&dir)? {
+            child = spawn()?;
+        }
         thread::sleep(Duration::from_millis(20));
     }
     let _ = child.kill();
