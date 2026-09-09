@@ -1634,20 +1634,8 @@ fn handshake(dir: &Path) -> io::Result<Option<Handshake>> {
 /// reconnect within a second, while refusing it left the launch key dead
 /// after every rebuild until a manual `stop`.
 fn ready(dir: &Path) -> io::Result<bool> {
-    let handshake = match handshake(dir) {
-        Ok(Some(handshake)) => handshake,
-        Ok(None) => return Ok(false),
-        // The socket can accept before a busy daemon gets to its writer.
-        // Let ensure's overall deadline govern readiness, not one probe.
-        Err(e)
-            if matches!(
-                e.kind(),
-                io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
-            ) =>
-        {
-            return Ok(false);
-        }
-        Err(e) => return Err(e),
+    let Some(handshake) = handshake(dir)? else {
+        return Ok(false);
     };
     if handshake.v != VERSION || handshake.build != build_id() {
         terminate(dir, handshake.pid)?;
