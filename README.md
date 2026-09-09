@@ -41,7 +41,7 @@ client: it displays those textures in the bar popover and full window.
 Omarchy 4 on x86_64.
 
 ```sh
-omarchy plugin add https://github.com/wesleygrimes/omastorm --enable
+omarchy plugin add https://github.com/wesleygrimes/omastorm.git --enable
 ```
 
 This clones the plugin into `~/.config/omarchy/plugins/com.omastorm.radar` and
