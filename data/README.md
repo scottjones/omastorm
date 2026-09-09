@@ -27,15 +27,22 @@ network envelope) and the engine strokes them into `ne` tiles at any zoom
 OpenMapTiles vector tiles served by OpenFreeMap, © OpenStreetMap contributors
 (ODbL), fetched by the engine at run time and attributed in the UI.
 
+The location picker searches [GeoNames](https://www.geonames.org/)
+`cities5000` (populated places with population ≥ 5000) clipped to that
+same envelope, with admin-1 names from `admin1CodesASCII.txt`.
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Map labels do
+not use this table.
+
 ## Fetching
 
-The engine embeds the Natural Earth geography at build time; the archived
+The engine embeds the Natural Earth geography and the GeoNames gazetteer at
+build time; the archived
 volume is read at run time by the decoder tests and by a daemon started with
 `OMASTORM_ARCHIVE` (the checks and captures). `data/raw/` is ignored, so a
 fresh checkout runs `bash scripts/setup-fixture.sh` once: it downloads the
-volume and the nine Natural Earth files and verifies `data/SHA256SUMS`. A build
-without the geography stops with a message naming the script; a shipped daemon
-embeds nothing archived. The geography URLs
+volume, the Natural Earth files, and the GeoNames gazetteer, then verifies
+`data/SHA256SUMS`. A build without those files stops with a message naming
+the script; a shipped daemon embeds nothing archived. The geography URLs
 reference upstream master; if upstream changes, checksum verification stops
 rather than silently changing the fixture. Installing and launching the plugin
 needs none of this; only a checkout build does.

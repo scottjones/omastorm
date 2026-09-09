@@ -187,19 +187,21 @@ when `osm` becomes available. `labels` are the tile's places for the overlay.
   the centre is the user's. A latitude outside ±90 or a longitude outside
   ±180 is answered with an `error`. `lock` and `follow` are shared flags;
   releasing the lock hands off on the next settle, not at once.
-- `search_places` ranks Natural Earth populated places for the location
-  picker and is answered with `places` to the sender only, like
-  `tile_ready`. `query` is required; optional `lat` and `lon` order nearer
-  matches first. Word-start matches beat substrings. At most eight results.
-  A blank query returns no results. A latitude or longitude outside range
-  is answered with an `error`. The reply is not shared state:
+- `search_places` ranks the embedded gazetteer (GeoNames populated places
+  with population ≥ 5000, clipped to the NEXRAD network envelope) for the
+  location picker and is answered with `places` to the sender only, like
+  `tile_ready`. Map labels stay on Natural Earth. `query` is required;
+  optional `lat` and `lon` order nearer matches first. Word-start matches
+  beat substrings. At most eight results. A blank query returns no results.
+  A latitude or longitude outside range is answered with an `error`. The
+  reply is not shared state:
 
 ```json
 {"type":"places","v":1,"query":"jacksonville",
  "results":[{"name":"Jacksonville","lat":30.3322,"lon":-81.6749,"class":"city","rank":8,
              "region":"Florida","country":"US"}]}
 ```
-  `region` is Natural Earth's admin-1 name (a US state, a Canadian province);
+  `region` is the admin-1 name (a US state, a Canadian province);
   `country` is the ISO 3166-1 alpha-2 code. Either may be omitted when empty.
 - `set_product` requests a product and elevation. An unsupported selection
   returns an `error` to its sender and retains the current frame.

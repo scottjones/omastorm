@@ -213,7 +213,7 @@ fn fixture_transport_and_shared_commands() {
     assert_eq!(e["type"], "error");
     assert_eq!(e["command"], "view_center");
     assert!(e["message"].as_str().unwrap().contains("lat"));
-    // Place search is a reply to its sender: Natural Earth places, not a
+    // Place search is a reply to its sender: gazetteer places, not a
     // state change, and a bad origin is rejected without a broadcast.
     send(
         &mut first,

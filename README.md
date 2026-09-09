@@ -165,6 +165,8 @@ This is a beta. Bugs, rough edges, and ideas go to
 Radar: NOAA NEXRAD Level II via the NOAA Open Data program on AWS. Basemap: ©
 OpenStreetMap contributors, [ODbL](https://opendatacommons.org/licenses/odbl/1-0/),
 tiles by [OpenFreeMap](https://openfreemap.org); Natural Earth, public domain.
+Location search: [GeoNames](https://www.geonames.org/),
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 Code: MIT, see [LICENSE](LICENSE).
 
 ## Contributing

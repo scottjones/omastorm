@@ -273,7 +273,7 @@ Item {
                 }
                 Word {
                     visible: !picker.coordError && picker.coordEntry.lat === undefined && !picker.rows.length
-                    text: picker.query.trim() ? "NO PLACE MATCHES" : "SEARCH A PLACE OR ENTER LATITUDE AND LONGITUDE"
+                    text: picker.query.trim() ? "NO PLACE MATCHES · TRY COORDINATES" : "TOWNS OF 5,000+ PEOPLE, OR ENTER LATITUDE AND LONGITUDE"
                     Layout.fillWidth: true; Layout.leftMargin: 12; Layout.preferredHeight: 28; opacity: .55; font.letterSpacing: 1
                 }
             }

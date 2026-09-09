@@ -359,7 +359,7 @@ pub enum Command {
         lat: f64,
         lon: f64,
     },
-    /// Rank Natural Earth places for the location picker. Answered with
+    /// Rank gazetteer places for the location picker. Answered with
     /// `places` to the sender; optional `lat`/`lon` order nearer matches first.
     SearchPlaces {
         query: String,

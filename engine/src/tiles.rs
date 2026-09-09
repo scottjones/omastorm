@@ -52,6 +52,7 @@ pub const NE_VERSION: &str = "5.2.0-pre";
 
 const BLOB: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ne.bin"));
 const PLACES: &str = include_str!(concat!(env!("OUT_DIR"), "/places.json"));
+const GAZETTEER: &str = include_str!(concat!(env!("OUT_DIR"), "/gazetteer.json"));
 
 /// Which data drew a tile (`docs/protocol.md`, `tile_ready.set`).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -185,6 +186,7 @@ struct Place {
     lon: f64,
     class: String,
     rank: u32,
+    #[serde(default)]
     min_zoom: f64,
     #[serde(default)]
     region: String,
@@ -261,6 +263,15 @@ impl Geography {
     fn scale(&self, z: u32) -> &Scale {
         &self.sets[usize::from(z >= DETAIL_FROM)]
     }
+}
+
+/// GeoNames cities with population ≥ 5000, clipped to the NEXRAD envelope.
+/// Location search uses this; map labels stay on Natural Earth `places`.
+fn gazetteer() -> &'static [Place] {
+    static GAZETTEER_PLACES: OnceLock<Vec<Place>> = OnceLock::new();
+    GAZETTEER_PLACES
+        .get_or_init(|| serde_json::from_str(GAZETTEER).expect("embedded gazetteer"))
+        .as_slice()
 }
 struct Varints<'a> {
     bytes: &'a [u8],
@@ -445,16 +456,17 @@ pub fn render(geography: &Geography, key: TileKey) -> io::Result<Vec<u8>> {
     crate::sweep::png(SIZE, SIZE, &compose(&boundaries, &coast, None))
 }
 
-/// Ranked Natural Earth places matching `query` for the location picker.
-/// Word-start matches beat substrings; nearer the optional origin, then
-/// lower rank, win within a tier. Empty or blank queries return nothing.
+/// Ranked gazetteer places matching `query` for the location picker
+/// (GeoNames ≥ 5000 people in the network envelope). Word-start matches
+/// beat substrings; nearer the optional origin, then lower rank, win
+/// within a tier. Empty or blank queries return nothing.
 pub fn search_places(query: &str, origin: Option<(f64, f64)>, limit: usize) -> Vec<Label> {
     let needle = query.trim().to_lowercase();
     if needle.is_empty() || limit == 0 {
         return Vec::new();
     }
     let mut scored: Vec<(u32, f64, u32, &Place)> = Vec::new();
-    for place in &Geography::embedded().places {
+    for place in gazetteer() {
         let name = place.name.to_lowercase();
         let tier = if word_start(&name, &needle) {
             0
@@ -791,6 +803,11 @@ mod tests {
             regions.contains(&"Florida") && regions.contains(&"North Carolina"),
             "Jacksonville results name their states: {regions:?}"
         );
+        let stokesdale = search_places("stokesdale", None, 4);
+        assert_eq!(stokesdale[0].name, "Stokesdale");
+        assert_eq!(stokesdale[0].region, "North Carolina");
+        assert!(gazetteer().len() > 15_000);
+        assert!(gazetteer().len() > Geography::embedded().places.len());
     }
 
     #[test]

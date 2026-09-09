@@ -167,7 +167,7 @@ FocusScope {
                     spacing: 10
                     Label { Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; text: "CHOOSE A LOCATION"; font.bold: true; font.pixelSize: 13 }
                     Label { Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; opacity: .7; font.pixelSize: 11
-                        text: "Search a place or enter latitude, longitude in the window." }
+                        text: "Search a town of 5,000+ people, or enter latitude and longitude in the window." }
                     Control { Layout.alignment: Qt.AlignHCenter; text: "CHOOSE A LOCATION"; onClicked: { card.session.requestLocationPicker(); card.expandRequested(); } }
                 }
             }

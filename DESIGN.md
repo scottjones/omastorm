@@ -32,10 +32,11 @@ state.json, valid coordinates from Omarchy's weather location
 every launch. Do not fetch at launch to find the user. Do not add GeoClue.
 
 When no location is known, the popover offers “Choose a location,” which
-opens a picker in the expanded window. The picker searches Natural Earth
-places (an engine `search_places` reply, with state/region and country so
-two Jacksonvilles are distinct) and accepts numeric
-latitude/longitude. Choosing a location writes state.json, never
+opens a picker in the expanded window. The picker searches GeoNames cities
+with population ≥ 5000 in the network envelope (an engine `search_places`
+reply, with state/region and country so two Jacksonvilles are distinct)
+and accepts numeric latitude/longitude. Map labels stay Natural Earth.
+Choosing a location writes state.json, never
 config.toml. `Shift+H` and the LOCATION control keep that picker reachable
 after onboarding. `0` / RESET returns the camera to the configured centre,
 else Omarchy's weather location, else the current centre at the default
