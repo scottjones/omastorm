@@ -159,7 +159,7 @@ The next popover or window starts it again. Please attach both logs to a
 ```sh
 omarchy plugin remove com.omastorm.radar
 ~/.local/share/omastorm/bin/omastorm-engine stop
-rm -rf ~/.local/share/omastorm ~/.cache/omastorm
+rm -rf ~/.local/share/omastorm ~/.cache/omastorm ~/.local/state/omastorm
 rm -rf ~/.config/omastorm                            # your config.toml; keep it to reinstall later
 rm -f ~/.local/share/applications/omastorm.desktop   # if you added the launcher entry
 ```
