@@ -15,7 +15,10 @@ Use the contribution workflow and its required checks for every commit.
   `$XDG_DATA_HOME/omastorm/`, `$XDG_STATE_HOME/omastorm/` (or
   `~/.local/state/omastorm/`), or `~/.config/omastorm/`. Only an explicit run of
   `scripts/install-launcher.sh` may write
-  `$XDG_DATA_HOME/applications/omastorm.desktop`.
+  `$XDG_DATA_HOME/applications/omastorm.desktop`. Only an explicit run of
+  `scripts/link-plugin.sh` may replace
+  `~/.config/omarchy/plugins/com.omastorm.radar` with a symlink to the
+  checkout (and restore the kept clone).
 - Ordinary `run.sh` never downloads. Network access belongs in the engine's
   live mode or explicit setup/install scripts. Plugin `--ensure` may install
   the pinned engine when no checkout debug engine exists. No archived radar

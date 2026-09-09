@@ -45,7 +45,13 @@ if [[ -t 1 ]]; then
   else
     location=$HOME/.local/state/omarchy/settings/weather.json
   fi
-  printf 'Omastorm %s\n  qml    %s\n  engine %s\n  config %s\n  state  %s\n  place  %s\n' \
-    "$PWD" "${OMASTORM_QML:-ui/shell.qml}" "$mode" "$config" "$state" "$location"
+  bar=$(bash scripts/link-plugin.sh --status)
+  printf 'Omastorm %s\n  qml    %s\n  engine %s\n  bar    %s\n  config %s\n  state  %s\n  place  %s\n' \
+    "$PWD" "${OMASTORM_QML:-ui/shell.qml}" "$mode" "$bar" "$config" "$state" "$location"
+fi
+# mise start / restart / onboard reload the bar widget when this checkout is
+# linked. Captures and checks leave the running shell alone.
+if [[ -n ${OMASTORM_RESCAN_PLUGIN:-} ]]; then
+  bash scripts/link-plugin.sh --rescan
 fi
 exec quickshell -p "${OMASTORM_QML:-ui/shell.qml}" "$@"
