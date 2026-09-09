@@ -20,10 +20,21 @@ QtObject {
     /// Places answering this client's `search_places`; a reply, not state.
     signal placesReady(var message)
     readonly property string runtime: Quickshell.env("XDG_RUNTIME_DIR") + "/omastorm/"
-    readonly property string texture: state && state.frame ? "file://" + runtime + state.frame.texture : ""
-    readonly property string azimuthLut: state && state.frame ? "file://" + runtime + state.frame.azimuthLut : ""
+    /// `frame` and `timeline` as stable slices of `state`. A client replaces
+    /// the whole state on every broadcast (docs/protocol.md), and while live
+    /// one arrives every second for `connection.ageSeconds` alone; these two
+    /// change only when their content does, so swatches, ticks, and the map
+    /// overlay are rebuilt for a new frame or timeline, not for a clock tick.
+    /// A string key compares by value, and the slice is parsed from it.
+    readonly property string frameKey: state && state.frame ? JSON.stringify(state.frame) : ""
+    readonly property var frame: frameKey ? JSON.parse(frameKey) : null
+    readonly property string timelineKey: state && state.timeline ? JSON.stringify(state.timeline) : ""
+    readonly property var timeline: timelineKey ? JSON.parse(timelineKey) : []
+    readonly property string siteId: state ? state.site.id : ""
+    readonly property string texture: frame ? "file://" + runtime + frame.texture : ""
+    readonly property string azimuthLut: frame ? "file://" + runtime + frame.azimuthLut : ""
     /// The selected station's row from `hello`, or null before it arrives.
-    readonly property var site: state ? (sites.find(s => s.id === state.site.id) || null) : null
+    readonly property var site: siteId ? (sites.find(s => s.id === siteId) || null) : null
     /// The protocol's one rule for texture paths (`docs/protocol.md`): the
     /// literal `tex/` prefix and exactly one further segment that is not empty,
     /// `.`, or `..` and holds no `/`, backslash, or NUL. The engine applies the

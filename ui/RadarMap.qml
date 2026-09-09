@@ -39,7 +39,12 @@ Item {
     // startup as built). With no station selected yet the rings, crosshair,
     // and tag stay away too.
     readonly property bool drawable: !!scan && scan.scanTime !== ""
-    readonly property int bands: scan ? scan.palette.length : 0
+    // The frame's palette as a list that changes only with its colours: a
+    // live sweep republishes the frame every chunk, and the swatch strip
+    // must not be rebuilt for a palette that stayed the same.
+    readonly property string paletteKey: scan ? scan.palette.join(" ") : ""
+    readonly property var palette: paletteKey ? paletteKey.split(" ") : []
+    readonly property int bands: palette.length
     property string error: ""
     signal tilesNeeded(int z, int x0, int y0, int x1, int y1)
     // The view centre once a pan or zoom settles, when it moved since the last
@@ -59,7 +64,11 @@ Item {
     function longitude(mx) { return mx * 360 - 180; }
     function latitude(my) { return Math.atan(Math.sinh(Math.PI * (1 - 2 * my))) * 180 / Math.PI; }
     readonly property var site: scan ? scan.site : null
+    // Scalars notify only when their value moves, so what hangs off them
+    // (the coverage footprint, the shader's site uniforms) is left alone by
+    // a frame republished at the same site.
     readonly property real siteLat: site ? site.lat : 0
+    readonly property real siteLon: site ? site.lon : 0
     readonly property real siteMx: site ? mercatorX(site.lon) : 0.5
     readonly property real siteMy: site ? mercatorY(site.lat) : 0.5
     // Ground kilometres per Mercator unit at the site's latitude, on the
@@ -327,9 +336,15 @@ Item {
         font.family: map.theme.font
         font.pixelSize: map.labelSize
     }
+    // Either list is replaced only when its layout differs, so the label
+    // delegates survive a relayout that changed nothing.
     function rebuildLabels() {
         var started = Date.now();
-        if (!scan) { labels = []; siteLabels = []; return; }
+        if (!scan) {
+            if (labels.length) labels = [];
+            if (siteLabels.length) siteLabels = [];
+            return;
+        }
         labelMetrics.text = siteId;
         var occupied = [{x:-7, y:-7, w:14, h:14},
                         {x:7, y:4, w:labelMetrics.advanceWidth+6, h:16}], result = [], stations = [];
@@ -357,7 +372,7 @@ Item {
             occupied.push({x:chosen.x,y:chosen.y,w:tw+6,h:16});
             stations.push({name:s.id, x:chosen.x, y:chosen.y, width:tw+6});
         }
-        siteLabels = stations;
+        if (JSON.stringify(siteLabels) !== JSON.stringify(stations)) siteLabels = stations;
         for (var p of places) {
             labelMetrics.text = p.name;
             var tx = (mercatorX(p.lon) - siteMx) * worldPixels, ty = (mercatorY(p.lat) - siteMy) * worldPixels;
@@ -374,7 +389,7 @@ Item {
             result.push({name:p.name, x:chosen.x, y:chosen.y,
                          width:tw+6, markerX:tx, markerY:ty});
         }
-        labels = result;
+        if (JSON.stringify(labels) !== JSON.stringify(result)) labels = result;
         if (Quickshell.env("OMASTORM_PROFILE")) console.log("OVERLAY_MS", Date.now()-started);
     }
 
@@ -427,12 +442,10 @@ Item {
         }
         return lines;
     }
-    readonly property var coverageSites: {
-        if (!drawable || !site) return [];
-        // Only the active radar gets a footprint; overlapping network circles
-        // obscure geography at continental zoom. Use the measured scan site.
-        return [{id:siteId, lat:site.lat, lon:site.lon}];
-    }
+    // Only the active radar gets a footprint; overlapping network circles
+    // obscure geography at continental zoom. Built from the measured scan
+    // site's scalars, so it changes with the station, not with every frame.
+    readonly property var coverageSites: drawable ? [{id:siteId, lat:siteLat, lon:siteLon}] : []
 
     // Upload the immutable sweep and its azimuth lookup once. Pan/zoom updates
     // shader uniforms; the polar-to-screen lookup runs in the shader and no
@@ -460,7 +473,7 @@ Item {
         id: paletteStrip
         width: Math.max(1, map.bands); height: 1
         Repeater {
-            model: map.scan ? map.scan.palette : []
+            model: map.palette
             Rectangle {
                 required property string modelData
                 required property int index
@@ -554,10 +567,13 @@ Item {
                 antialiasing: true
             }
         }
+        // Every table station but the active one, whose marker is the
+        // crosshair; hiding it keeps the 162 others across a hand-off.
         Repeater {
-            model: map.sites.filter(s => s.id !== map.siteId)
+            model: map.sites
             Rectangle {
                 required property var modelData
+                visible: modelData.id !== map.siteId
                 x: (map.mercatorX(modelData.lon)-map.siteMx)*map.worldPixels-3
                 y: (map.mercatorY(modelData.lat)-map.siteMy)*map.worldPixels-3
                 width: 6; height: 6

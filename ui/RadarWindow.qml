@@ -34,18 +34,20 @@ Item {
         else close();
     }
     readonly property var state: engine.state
-    readonly property var scan: state ? state.frame : null
+    // The frame and the timeline are the engine's stable slices: they change
+    // with their content, not with the once-a-second live broadcast.
+    readonly property var scan: engine.frame
     // Every station, product, and source string on screen comes from the engine.
-    readonly property string siteId: state ? state.site.id : ""
+    readonly property string siteId: engine.siteId
     readonly property string siteName: engine.site ? engine.site.name.toUpperCase() : ""
     readonly property string sourceBadge: state ? state.source.toUpperCase() : ""
     // The timeline (DESIGN.md): the station's frames oldest
     // first with the sweep in progress last; the engine owns the position.
-    readonly property var frames: state ? state.timeline : []
+    readonly property var frames: engine.timeline
     readonly property int frameIndex: scan ? frames.findIndex(f => f.id === scan.id) : -1
     readonly property bool newestShown: frameIndex >= 0 && frameIndex === frames.length - 1
     readonly property bool playing: state ? state.playing : false
-    readonly property var newestComplete: { var done = frames.filter(f => f.status === "complete"); return done.length ? done[done.length - 1] : null; }
+    readonly property var newestComplete: Timeline.newestComplete(frames)
     // The connection condition while live (DESIGN.md):
     // the header's third row shows the age of the frame on screen beside
     // its time, and its status slot names the condition or the sweep in
@@ -57,19 +59,10 @@ Item {
     readonly property color conditionColor: condition === "stale" ? theme.yellow
         : condition === "loading" ? theme.accent
         : condition === "unavailable" || condition === "offline" ? theme.red : theme.foreground
-    // The engine gives the newest complete frame's age, ticking once a
-    // second; an older frame on screen adds the distance between the two
-    // scan times, so no local clock is consulted.
-    readonly property int shownAge: !state || !scan || !scan.scanTime || !newestComplete ? -1
-        : Math.max(0, state.connection.ageSeconds + Math.round((Date.parse(newestComplete.scanTime) - Date.parse(scan.scanTime)) / 1000))
-    readonly property string ageText: condition && shownAge >= 0 ? ago(shownAge) : ""
-    function ago(seconds) {
-        var m = Math.floor(seconds / 60);
-        if (m < 1) return "just now";
-        if (m < 60) return m + " min ago";
-        var h = Math.floor(m / 60);
-        return h < 24 ? h + "h " + (m % 60) + "m ago" : Math.floor(h / 24) + "d " + (h % 24) + "h ago";
-    }
+    // The age of the frame on screen (Timeline.js): the engine's age of the
+    // newest complete frame plus the distance back to the shown one.
+    readonly property int shownAge: state ? Timeline.shownAge(frames, scan, state.connection.ageSeconds) : -1
+    readonly property string ageText: condition && shownAge >= 0 ? Timeline.ago(shownAge) : ""
     function lasting(seconds) {
         var m = Math.floor(seconds / 60), h = Math.floor(m / 60);
         return m < 60 ? m + " MIN" : h < 24 ? h + "H " + (m % 60) + "M" : Math.floor(h / 24) + "D " + (h % 24) + "H";
@@ -84,7 +77,7 @@ Item {
         case "unavailable": return !newestComplete ? siteId + " UNAVAILABLE · NO DATA"
             : siteId + " UNAVAILABLE" + (win.compact ? "" : " · NO DATA FOR " + lasting(state.connection.ageSeconds)) + " · LAST " + last;
         case "offline": return !scan.scanTime ? "OFFLINE · NOTHING CACHED"
-            : "OFFLINE · " + (win.compact ? "" : "SHOWING ") + "CACHED " + clock(scan.scanTime, true) + " · " + ago(shownAge).toUpperCase();
+            : "OFFLINE · " + (win.compact ? "" : "SHOWING ") + "CACHED " + clock(scan.scanTime, true) + " · " + Timeline.ago(shownAge).toUpperCase();
         default: return scan.status === "partial" && scan.scanTime ? "SCANNING · " + Math.max(0, scan.rays - 1) + " RADIALS" : "";
         }
     }
@@ -102,7 +95,11 @@ Item {
     function togglePlay() { if (frames.length > 1) engine.send({type: playing ? "pause" : "play"}); }
     function step(delta) { if (frames.length > 1) engine.send({type: "step", delta: delta}); }
     function jump(toNewest) { if (frames.length > 1) engine.send({type: "seek", id: frames[toNewest ? frames.length - 1 : 0].id}); }
-    readonly property int bands: scan ? scan.palette.length : 0
+    // The palette as a list that changes only with its colours (as the map
+    // keeps it), so the legend's columns outlive a republished live sweep.
+    readonly property string paletteKey: scan ? scan.palette.join(" ") : ""
+    readonly property var palette: paletteKey ? paletteKey.split(" ") : []
+    readonly property int bands: palette.length
     function legendLabel(index) {
         var bounds = scan.bounds;
         return index === 0 ? "<" + bounds[1] : index === bands - 1 ? bounds[index] + "+" : String(bounds[index]);
@@ -154,13 +151,15 @@ Item {
         Qt.callLater(() => { map.holdSpan = false; });
     }
     property bool viewApplied: false
-    onStateChanged: {
-        if (!state) viewApplied = false;
-        else {
-            store.initialize();
-            if (!viewApplied) { applyView(); viewApplied = true; }
-            maybeOfferLocation();
-        }
+    // The window acts on the connection, not on every broadcast: the first
+    // state after none restores the camera, nudges the session, and offers
+    // the location picker when nothing supplies a centre.
+    readonly property bool connected: !!state
+    onConnectedChanged: {
+        if (!connected) { viewApplied = false; return; }
+        store.initialize();
+        if (!viewApplied) { applyView(); viewApplied = true; }
+        maybeOfferLocation();
     }
     function maybeOfferLocation() {
         if (!opened || !store.needsLocation || locationPicker.open) return;
@@ -672,7 +671,7 @@ Item {
                         id: legendRow
                         anchors.fill: parent; spacing: 0
                         Repeater {
-                            model: app.scan ? app.scan.palette : []
+                            model: app.palette
                             ColumnLayout {
                                 required property string modelData
                                 required property int index

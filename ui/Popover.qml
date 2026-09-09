@@ -10,8 +10,10 @@ FocusScope {
     property var theme: session.theme.snapshot
     property alias engine: connection
     readonly property var state: connection.state
-    readonly property var scan: state ? state.frame : null
-    readonly property var frames: state ? state.timeline : []
+    // The engine's stable slices: the ticks are rebuilt for a new frame or
+    // timeline, not for the once-a-second live broadcast.
+    readonly property var scan: connection.frame
+    readonly property var frames: connection.timeline
     readonly property var slots: Timeline.slots(frames)
     readonly property string condition: state ? state.source === "archived" ? "archived" : state.connection.status : "offline"
     readonly property color statusColor: condition === "stale" ? theme.yellow
@@ -20,13 +22,8 @@ FocusScope {
         if (!state) return "OFFLINE";
         if (condition === "archived") return "ARCHIVED";
         var label = condition === "ok" ? "LIVE" : condition.toUpperCase();
-        var complete = frames.filter(f => f.status === "complete");
-        if (!scan.scanTime || !complete.length) return label;
-        var age = Math.max(0, state.connection.ageSeconds +
-            Math.round((Date.parse(complete[complete.length - 1].scanTime) - Date.parse(scan.scanTime)) / 1000));
-        var minutes = Math.floor(age / 60);
-        return label + " · " + (minutes < 1 ? "just now" : minutes < 60 ? minutes + " min ago"
-            : minutes < 1440 ? Math.floor(minutes / 60) + "h ago" : Math.floor(minutes / 1440) + "d ago");
+        var age = Timeline.shownAge(frames, scan, state.connection.ageSeconds);
+        return age < 0 ? label : label + " · " + Timeline.ago(age, true);
     }
     signal expandRequested()
     signal closeRequested()
@@ -88,7 +85,7 @@ FocusScope {
         RowLayout {
             Layout.fillWidth: true
             spacing: 6
-            Label { text: card.state ? card.state.site.id : "—"; font.bold: true; font.pixelSize: 14 }
+            Label { text: card.state ? connection.siteId : "—"; font.bold: true; font.pixelSize: 14 }
             Label { Layout.fillWidth: true; text: connection.site ? connection.site.name : ""; opacity: .65 }
             Rectangle { width: 5; height: 5; radius: 3; color: card.statusColor }
             Label { text: card.statusText; color: card.statusColor; font.pixelSize: 11 }
@@ -105,7 +102,7 @@ FocusScope {
                 scan: card.scan
                 texture: connection.texture
                 azimuthLut: connection.azimuthLut
-                siteId: card.state ? card.state.site.id : ""
+                siteId: connection.siteId
                 sites: connection.sites
                 tileRoot: "file://" + connection.runtime
                 theme: card.theme
