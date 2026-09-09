@@ -29,7 +29,25 @@ Resolve the map center from the first valid source:
 3. Omarchy's weather coordinates in
    `~/.local/state/omarchy/settings/weather.json` (`name`, `latitude`,
    `longitude`). File existence alone is insufficient; coordinates must be valid.
-4. The location picker: search for a place or enter latitude and longitude.
+4. Approximate IP location from ipwho.is over HTTPS, unless disabled.
+5. The location picker: search for a place or enter latitude and longitude.
+
+`ip_location = false` disables IP lookup; omission enables it. The lookup is
+requested only when explicit, remembered, and weather coordinates are absent.
+The provider receives the connection's public IP. The engine retains only
+city and coordinates in memory (success for 24 hours, failure for five minutes),
+and the UI remembers a successful view in `state.json`. A reopened app uses
+that remembered view without another lookup. Opting out does not erase it.
+The initial view is labeled `IP NEAR …`; IP coordinates are approximate and
+may reflect a VPN or ISP location. LOCATION always lets you choose another.
+
+The launcher performs no location request. After engine connection, one lookup
+takes at most ten seconds; the UI also times out an older engine that cannot
+answer. Failure leaves the picker available. Opening the picker, navigating,
+or selecting a radar prevents a late reply from changing the view. Archived
+sessions never locate. When `OMASTORM_CONFIG` isolates a check, `ip_location =
+true` is required to opt it in; `OMASTORM_LOCATION_URL` can direct the engine
+to a local test endpoint.
 
 A missing location opens a "Choose a location" prompt in the popover; its
 button opens the expanded window's picker. Accepting a location saves the

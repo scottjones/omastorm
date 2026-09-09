@@ -35,10 +35,15 @@ map center in this order:
 1. Explicit `center_lat` and `center_lon` in `config.toml`.
 2. The last center remembered in `state.json`.
 3. Valid coordinates from Omarchy's weather location (`weather.json`).
-4. A location chosen through Omastorm's location picker.
+4. Approximate IP location, unless `ip_location = false`.
+5. A location chosen through Omastorm's location picker.
 
-Only show onboarding when none of the first three sources supplies a valid
-center. The popover offers "Choose a location", opening the expanded
+If the first three sources have no valid center, the UI requests one bounded
+IP lookup from the running live engine. Remember a successful center like a
+weather-derived view. While it is pending, the location picker remains
+available; opening it or navigating takes priority over a late reply.
+Failure, opt-out, or an older engine leaves onboarding available.
+The popover offers "Choose a location", opening the expanded
 window's picker. Offer place search and "Enter coordinates", which reveals
 labeled latitude and longitude fields with validation. Place search is an
 engine `search_places` reply over GeoNames cities with population ≥ 5000
@@ -51,8 +56,10 @@ radar. Choosing a location writes `state.json`, never `config.toml`.
 
 Reuse Omarchy's location when available without requiring its weather plugin.
 Read weather settings only; never write them. Location search is an explicit
-user action handled through the engine. Do not use GeoClue or fetch at launch
-to discover the user's location.
+user action handled through the engine. The IP fallback is an engine request
+after bootstrap; the launcher itself fetches nothing. Do not use GeoClue.
+Archived views and isolated checks do not request IP location unless a live
+check explicitly opts in. Disabling IP lookup does not erase remembered views.
 
 Resolve the radar separately: an explicit `locked_radar` in config wins,
 otherwise restore a remembered radar lock, otherwise choose the station

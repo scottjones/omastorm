@@ -85,6 +85,8 @@ function configLock(values) {
 function configErrors(values) {
     var errors = [];
     if (!values) return errors;
+    if (values.ip_location !== undefined && typeof values.ip_location !== "boolean")
+        errors.push("ip_location must be true or false");
     var hasLat = values.center_lat !== undefined, hasLon = values.center_lon !== undefined;
     if (hasLat !== hasLon)
         errors.push("center_lat and center_lon must both be set");

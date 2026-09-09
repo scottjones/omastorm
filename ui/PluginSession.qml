@@ -27,6 +27,9 @@ QtObject {
     property bool needsLocation: false
     property string placeName: ""
     property string locationSource: ""
+    property bool ipLocationDismissed: false
+    readonly property bool locating: needsLocation && config.ipLocationEnabled
+        && !ipLocationDismissed && engine.locationPending
     property real centerLat: 0
     property real centerLon: 0
     property real span: Location.DEFAULT_SPAN
@@ -40,8 +43,51 @@ QtObject {
     signal locationPickerRequested()
 
     function requestLocationPicker() {
+        cancelIpLocation();
         pendingLocationPicker = true;
         locationPickerRequested();
+    }
+
+    function cancelIpLocation() { ipLocationDismissed = true; }
+
+    function userNavigated(lat, lon, spanKm) {
+        if (!Location.validPair(lat, lon)) return;
+        if (needsLocation) {
+            centerLat = lat;
+            centerLon = lon;
+            span = Location.clampSpan(spanKm);
+            locationSource = "state";
+            hasView = true;
+            needsLocation = false;
+            persist();
+            applyRadar();
+        }
+        cancelIpLocation();
+    }
+
+    function tryIpLocation() {
+        if (!initialized || !ready || hasView || !needsLocation
+            || !config.ipLocationEnabled || ipLocationDismissed) return;
+        engine.locateHome();
+    }
+
+    function acceptIpLocation() {
+        if (!ready || hasView || !config.ipLocationEnabled || ipLocationDismissed
+            || !engine.state || engine.state.source !== "live" || !engine.location) return;
+        // Recheck sources that may have arrived while the lookup was pending.
+        resolve();
+        if (hasView) return;
+        var place = engine.location;
+        centerLat = place.lat;
+        centerLon = place.lon;
+        placeName = place.name || "";
+        locationSource = "ip";
+        span = Location.clampSpan(remembered.span);
+        hasView = true;
+        needsLocation = false;
+        persist();
+        viewChanged();
+        applyRadar();
     }
 
     function resolve() {
@@ -80,6 +126,7 @@ QtObject {
             appliedExplicit = null;
         }
         applyConfigLockChange();
+        tryIpLocation();
         viewChanged();
     }
 
@@ -135,6 +182,7 @@ QtObject {
 
     function setPlace(lat, lon, name) {
         if (!Location.validPair(lat, lon)) return;
+        cancelIpLocation();
         placeName = name || "";
         locationSource = "state";
         needsLocation = false;
@@ -180,6 +228,7 @@ QtObject {
         lat = Number(lat);
         lon = Number(lon);
         if (!id || !Location.validPair(lat, lon)) return;
+        cancelIpLocation();
         placeName = name || id;
         locationSource = "state";
         needsLocation = false;
@@ -251,8 +300,10 @@ QtObject {
     }
 
     property Timer persistTimer: Timer { interval: 400; onTriggered: session.persist() }
+    onLocatingChanged: viewChanged()
     property Connections engineEvents: Connections {
         target: session.engine
+        function onLocationChanged() { session.acceptIpLocation(); }
         function onStateChanged() {
             if (!session.engine.state) session.initialized = false;
             else { session.startupError = ""; session.initialize(); }

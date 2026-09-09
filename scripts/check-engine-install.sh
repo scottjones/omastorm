@@ -30,6 +30,9 @@ asset=omastorm-engine-x86_64-unknown-linux-gnu
 sha256=$sum
 PIN
 export OMASTORM_ENGINE_PIN=$pin
+# The installer is still x86-only on this independent feature branch. Its
+# fixtures exercise selection/hash handling using the native debug binary.
+export OMASTORM_ENGINE_MACHINE=x86_64
 dest=$XDG_DATA_HOME/omastorm/bin/omastorm-engine
 install_cmd=(bash scripts/install-engine.sh)
 
@@ -101,6 +104,10 @@ timeout 2 socat -t0.2 - "UNIX-CONNECT:$XDG_RUNTIME_DIR/omastorm/engine.sock" < /
 # The asset is fetched once into target/pinned/<sha256> and reused. When
 # GitHub is unreachable the step says so and passes; a checkout is correct
 # without the network, and the fetch is retried on the next run.
+if [[ $(uname -m) != x86_64 ]]; then
+  echo 'Installer fixtures PASS; the published x86 binary can only be run on x86.'
+  exit 0
+fi
 committed=$(awk -F= '/^sha256=/{print $2}' engine/release.pin)
 tag=$(awk -F= '/^tag=/{print $2}' engine/release.pin)
 [[ $committed =~ ^[a-f0-9]{64}$ ]] || fail 'Committed pin sha256 is not 64 lowercase hex digits'

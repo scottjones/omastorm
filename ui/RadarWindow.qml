@@ -20,7 +20,8 @@ Item {
         opened = true;
         if (session) session.windowOpen = true;
         applyView();
-        if (store.needsLocation || store.pendingLocationPicker) Qt.callLater(() => locationPicker.show(""));
+        if (store.pendingLocationPicker) Qt.callLater(() => locationPicker.show(""));
+        else maybeOfferLocation();
     }
     function close() {
         if (!opened) return;
@@ -163,9 +164,9 @@ Item {
         }
     }
     function maybeOfferLocation() {
-        if (!opened || !store.needsLocation || locationPicker.open) return;
+        if (!opened || !store.initialized || !store.needsLocation || store.locating || locationPicker.open) return;
         Qt.callLater(() => {
-            if (app.opened && app.store.needsLocation && !locationPicker.open) locationPicker.show("");
+            if (app.opened && app.store.initialized && app.store.needsLocation && !app.store.locating && !locationPicker.open) locationPicker.show("");
         });
     }
     Connections {
@@ -243,7 +244,7 @@ Item {
         function status(): string {
             return JSON.stringify({sheet: sheet.open, menu: treatmentMenu.opened, treatment: app.treatment, weakFloor: app.weakFloor === null ? "off" : app.weakFloor, error: app.configError,
                                    span: Math.round(map.span * 10) / 10, lat: Math.round(map.centerLat * 1000) / 1000, lon: Math.round(map.centerLon * 1000) / 1000,
-                                   locationSource: app.store.locationSource, needsLocation: app.store.needsLocation,
+                                   locationSource: app.store.locationSource, needsLocation: app.store.needsLocation, locating: app.store.locating,
                                    site: app.siteId, locked: app.locked, lockSource: app.store.lockSource, outsideCoverage: app.outsideCoverage});
         }
     }
@@ -525,6 +526,7 @@ Item {
                     radarOpacity: app.condition === "unavailable" ? .6 : 1
                     labelSize: win.compact ? 10 : 12
                     locked: app.locked
+                    onNavigated: (lat, lon, spanKm) => app.store.userNavigated(lat, lon, spanKm)
                     // A settled pan hands the centre to the engine, which switches
                     // station while following and unlocked; the camera stays.
                     onViewSettled: (lat, lon) => {
@@ -743,7 +745,8 @@ Item {
                     }
                 }
                 GlyphButton { glyph: app.locked ? "lock" : "follow"; selected: app.locked; enabled: !!app.state; onClicked: app.toggleLock() }
-                Control { text: win.compact ? "⌂" : "⌂ LOCATION"; onClicked: locationPicker.show("") }
+                Control { text: win.compact ? "⌂" : app.store.locationSource === "ip"
+                    ? "⌂ IP NEAR " + (app.store.placeName || "YOU").toUpperCase() : "⌂ LOCATION"; onClicked: locationPicker.show("") }
                 Item { Layout.fillWidth: true }
                 // The treatment chip (DESIGN.md, treatment control): one
                 // low-emphasis control naming the treatment; click opens the
@@ -794,6 +797,7 @@ Item {
           }
           LocationPicker {
             id: locationPicker
+            onOpenChanged: if (open) app.store.cancelIpLocation()
             anchors.fill: parent
             theme: app.theme
             engine: engine

@@ -1,5 +1,6 @@
 mod catalog;
 mod live;
+mod location;
 mod osm;
 mod protocol;
 mod sweep;
@@ -805,8 +806,11 @@ impl Shared {
                 false,
                 Some("Only reflectivity at elevation index 0 is available in this build.".into()),
             ),
-            // Tile requests and place search are answered to the sender, not state.
-            Command::TilesNeeded { .. } | Command::SearchPlaces { .. } | Command::Unsupported => {
+            // Private replies never change shared radar state.
+            Command::LocateHome
+            | Command::TilesNeeded { .. }
+            | Command::SearchPlaces { .. }
+            | Command::Unsupported => {
                 return None;
             }
         };
@@ -1143,6 +1147,7 @@ fn receive(
     shared: &Mutex<Shared>,
     reply: &Sender<String>,
     tiles: &Sender<tiles::Request>,
+    location: &Sender<()>,
     bytes: &[u8],
 ) {
     let value = match serde_json::from_slice::<Value>(bytes) {
@@ -1154,6 +1159,10 @@ fn receive(
         // A command newer than this build; the sender is not told, since
         // ignoring it is the documented answer (docs/protocol.md).
         Ok(Command::Unsupported) => return eprintln!("Ignoring unsupported command: {kind}"),
+        Ok(Command::LocateHome) => {
+            let _ = location.try_send(());
+            return;
+        }
         Ok(Command::TilesNeeded { z, x0, y0, x1, y1 }) => {
             match (tiles::Request { z, x0, y0, x1, y1 }).validate() {
                 // A full request queue means the client is flooding; the
@@ -1219,10 +1228,12 @@ fn client(
     stream: tokio::net::UnixStream,
     shared: Arc<Mutex<Shared>>,
     osm: Arc<osm::Osm>,
+    locator: Arc<location::Locator>,
 ) -> io::Result<()> {
     let (reader, mut writer) = stream.into_split();
     let (tx, mut rx) = mpsc::channel::<String>(QUEUE);
     let (tiles_tx, tiles_rx) = mpsc::channel::<tiles::Request>(8);
+    let (location_tx, mut location_rx) = mpsc::channel::<()>(1);
     let id;
     {
         let mut shared = shared.lock().unwrap();
@@ -1237,6 +1248,22 @@ fn client(
         shared.clients.push((id, tx.clone()));
     }
     tokio::spawn(serve_tiles(shared.clone(), osm, tx.clone(), tiles_rx));
+    let location_reply = tx.clone();
+    tokio::spawn(async move {
+        while location_rx.recv().await.is_some() {
+            let message = match locator.locate().await {
+                Ok(location) => line(&Message::Location(&location)),
+                Err(message) => line(&Message::Error(&Rejection {
+                    v: VERSION,
+                    command: "locate_home",
+                    message: &message,
+                })),
+            };
+            if location_reply.try_send(message).is_err() {
+                break;
+            }
+        }
+    });
     tokio::spawn(async move {
         while let Some(message) = rx.recv().await {
             if !matches!(
@@ -1263,7 +1290,7 @@ fn client(
             {
                 break;
             }
-            receive(&shared, &tx, &tiles_tx, &bytes);
+            receive(&shared, &tx, &tiles_tx, &location_tx, &bytes);
         }
         shared
             .lock()
@@ -1509,6 +1536,7 @@ fn serve(dir: PathBuf) -> io::Result<()> {
     let tile_store = tiles::Store::open(&dir, &build_id()[..8])?;
     // Opens the vector tile cache and builds the HTTP client; fetches nothing.
     let osm = Arc::new(osm::Osm::open()?);
+    let locator = Arc::new(location::Locator::new());
     // The frame ring buffer; live frames are written here as they complete.
     let catalog = Arc::new(catalog::Catalog::open(osm::cache_root()?.join("frames"))?);
     let (events, event_rx) = mpsc::channel(16);
@@ -1560,11 +1588,9 @@ fn serve(dir: PathBuf) -> io::Result<()> {
     });
     runtime.block_on(async {
         loop {
-            match listener
-                .accept()
-                .await
-                .and_then(|(stream, _)| client(stream, shared.clone(), osm.clone()))
-            {
+            match listener.accept().await.and_then(|(stream, _)| {
+                client(stream, shared.clone(), osm.clone(), locator.clone())
+            }) {
                 Ok(()) => {}
                 Err(e) => eprintln!("Client: {e}"),
             }

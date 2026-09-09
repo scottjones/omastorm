@@ -57,13 +57,13 @@ sock="$XDG_RUNTIME_DIR/omastorm/engine.sock"
 tell() { printf '%s\n' "$@" | socat -t0.2 - "UNIX-CONNECT:$sock" >/dev/null; }
 # Two deterministic complete frames, using the archived fixture's metadata
 # and PNGs, exercise the real catalog/transport without waiting two volumes.
-timeout 2 socat -t0.2 - "UNIX-CONNECT:$sock" < /dev/null | sed -n 2p > "$scratch/state.json"
+timeout 2 socat -t0.2 - "UNIX-CONNECT:$sock" < /dev/null | jq -c 'select(.type == "state")' | head -n1 > "$scratch/engine-state.json"
 ruby - "$scratch" <<'RUBY_SEED'
 require 'json'
 require 'fileutils'
 require 'open3'
 scratch = ARGV.fetch(0)
-frame = JSON.parse(File.read("#{scratch}/state.json")).fetch('frame')
+frame = JSON.parse(File.read("#{scratch}/engine-state.json")).fetch('frame')
 dir = "#{scratch}/cache/omastorm/frames"
 FileUtils.mkdir_p("#{dir}/KTLX")
 sql = []

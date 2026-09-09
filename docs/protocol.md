@@ -158,6 +158,25 @@ when `osm` becomes available. `labels` are the tile's places for the overlay.
 
 ## Client commands
 
+`locate_home` requests approximate IP location from the running engine. It
+does not select a station or alter shared radar state. The sender receives
+either a private `location` reply or an `error` naming `locate_home`:
+
+```json
+{"type":"locate_home"}
+{"type":"location","v":1,"name":"Stamford","lat":41.0534,"lon":-73.5387}
+```
+
+Concurrent clients share a bounded lookup cache (24 hours for success, five
+minutes for failure). HTTPS requests to ipwho.is time out after ten seconds
+and responses are limited to 16 KiB. Replies contain city and valid numeric
+coordinates, never an IP address. The UI requests this only for a live view
+without explicit, remembered, or weather coordinates, unless opted out. It
+honors later user choices, applies radar selection independently, and saves
+the resulting center through the normal remembered-view path. The engine
+still reads neither config nor remembered state. An older engine ignores the
+unknown command, so the UI times out and offers the location picker.
+
 ```json
 {"type":"select_site","id":"KTLX"}
 {"type":"follow","enabled":true}
@@ -355,7 +374,7 @@ to the engine restores the necessary selection and flags without resetting
 the active camera. A change of frame or station never re-centers the map
 except when the user picks a station in search, which the UI centres on.
 Location picks write state.json. With no location, the popover offers the
-picker instead of inventing a centre.
+picker if the optional IP fallback cannot supply a center.
 
 `hello` additionally includes `pid`, `build` (an opaque fingerprint),
 `sitesSource`, `sitesRetrieved`, and `sitesNotes`. These allow the launcher to
