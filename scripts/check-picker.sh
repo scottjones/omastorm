@@ -9,9 +9,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 check_dir="$PWD/target/check-picker"
 mkdir -p "$check_dir"
-: > "$check_dir/none.toml" # no home site: the fixture's own camera
+: > "$check_dir/none.toml"
+jq -c '.sites[] | select(.id=="KTLX") | {lat, lon, span: 210}' engine/data/sites.json > "$check_dir/state.json"
 export QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=basic QT_QUICK_BACKEND=rhi QSG_RHI_BACKEND=opengl
-OMASTORM_CONFIG="$check_dir/none.toml" bash run.sh > "$check_dir/log" 2>&1 &
+OMASTORM_CONFIG="$check_dir/none.toml" OMASTORM_STATE="$check_dir/state.json" bash run.sh > "$check_dir/log" 2>&1 &
 pid=$!
 trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
 call() { quickshell ipc --pid "$pid" call picker "$@"; }

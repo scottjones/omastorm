@@ -3,16 +3,16 @@ import Quickshell
 import Quickshell.Io
 import "Toml.js" as Toml
 
-// ~/.config/omastorm/config.toml (docs/protocol.md, configuration): the
-// home station, whether the map centre picks the station, the treatment,
-// the weak-return floor, and the `[keys]` table. Watched like the theme
-// files, so an edit applies to the running window. OMASTORM_CONFIG names
-// another file for checks and captures; a missing file is no config.
+// ~/.config/omastorm/config.toml (docs/protocol.md, configuration):
+// deliberate preferences — an explicit map centre, a locked radar, the
+// treatment, the weak-return floor, and the `[keys]` table. Watched like
+// the theme files, so an edit applies to the running window. OMASTORM_CONFIG
+// names another file for checks and captures; a missing file is no config.
 //
-// Omarchy's own location (DESIGN.md, site model), the file its weather
-// panel writes, is read beside it for the current-location home. It is
-// this machine's setting, so a check or capture that names its own config
-// leaves it alone unless OMASTORM_LOCATION names a location file too.
+// Omarchy's own location (DESIGN.md, location), the file its weather panel
+// writes, is read beside it when no explicit or remembered centre exists.
+// It is this machine's setting, so a check or capture that names its own
+// config leaves it alone unless OMASTORM_LOCATION names a location file too.
 QtObject {
     id: root
     readonly property string path: Quickshell.env("OMASTORM_CONFIG") || (Quickshell.env("HOME") + "/.config/omastorm/config.toml")
@@ -24,9 +24,9 @@ QtObject {
     readonly property bool ready: configRead && locationRead
     property bool configRead: false
     property bool locationRead: false
-    readonly property string homeSite: typeof values.home_site === "string" ? values.home_site.trim().toUpperCase() : ""
-    // undefined while unset: the engine's shared flag stands.
-    readonly property var follow: typeof values.follow === "boolean" ? values.follow : undefined
+    readonly property var centerLat: typeof values.center_lat === "number" ? values.center_lat : undefined
+    readonly property var centerLon: typeof values.center_lon === "number" ? values.center_lon : undefined
+    readonly property string lockedRadar: typeof values.locked_radar === "string" ? values.locked_radar.trim().toUpperCase() : ""
     // The raw value; the window judges it against the three treatments.
     readonly property var treatment: values.treatment
     // The raw value; the window judges it: a dBZ number, false, or unset.
@@ -45,35 +45,8 @@ QtObject {
         watchChanges: true
         printErrors: false
         onFileChanged: reload()
-        onLoaded: { root.raw = text(); root.values = Toml.parse(root.raw); root.configRead = true; }
-        onLoadFailed: { root.raw = ""; root.values = ({}); root.configRead = true; }
-    }
-    // The file as last read, so a save keeps every other line.
-    property string raw: ""
-    property string pendingText: ""
-    // Save `id` as home_site: the top-level line is replaced in place, or
-    // added above the first table; nothing else in the file changes. The
-    // directory may not exist yet, so the write follows its creation, and
-    // the watch above reloads the result like any other edit.
-    function setHome(id) {
-        var lines = raw.length ? raw.replace(/\n$/, "").split("\n") : [];
-        var line = 'home_site = "' + id + '"', out = [], done = false, inTable = false;
-        for (var l of lines) {
-            if (/^\s*\[/.test(l)) inTable = true;
-            if (!done && !inTable && /^\s*home_site\s*=/.test(l)) { out.push(line); done = true; }
-            else out.push(l);
-        }
-        if (!done) {
-            var at = out.findIndex(l => /^\s*\[/.test(l));
-            if (at < 0) out.push(line); else out.splice(at, 0, line);
-        }
-        pendingText = out.join("\n") + "\n";
-        mkdir.running = true;
-    }
-    property Process mkdir: Process {
-        command: ["mkdir", "-p", root.path.substring(0, root.path.lastIndexOf("/"))]
-        // The view does not report its own write, so the values follow at once.
-        onExited: { file.setText(root.pendingText); root.raw = root.pendingText; root.values = Toml.parse(root.raw); }
+        onLoaded: { root.values = Toml.parse(text()); root.configRead = true; }
+        onLoadFailed: { root.values = ({}); root.configRead = true; }
     }
     property FileView locationFile: FileView {
         path: root.locationPath

@@ -40,10 +40,14 @@ map center in this order:
 Only show onboarding when none of the first three sources supplies a valid
 center. The popover offers "Choose a location", opening the expanded
 window's picker. Offer place search and "Enter coordinates", which reveals
-labeled latitude and longitude fields with validation. "Show radar" accepts
-the location. No separate setup wizard or settings window is required. Keep
-"Choose location…" available after onboarding. Coordinate entry chooses a
-view; it does not create a permanent config override or lock a radar.
+labeled latitude and longitude fields with validation. Place search is an
+engine `search_places` reply over GeoNames cities with population ≥ 5000
+in the network envelope (state/region and country so two Jacksonvilles are
+distinct); map labels stay Natural Earth. "Show radar" accepts the location.
+No separate setup wizard or settings window is required. Keep the picker
+reachable after onboarding (`Shift+H` and LOCATION). Coordinate entry
+chooses a view; it does not create a permanent config override or lock a
+radar. Choosing a location writes `state.json`, never `config.toml`.
 
 Reuse Omarchy's location when available without requiring its weather plugin.
 Read weather settings only; never write them. Location search is an explicit
@@ -88,8 +92,9 @@ resolves preferences and remembered state, then sends commands.
 New settings are optional, omit means default, and a bad value is named in
 the status slot. Keep deliberate settings in `config.toml` and session restore in `state.json`.
 The app never rewrites config because the user pans, zooms, or changes a lock.
-See [configuration](docs/configuration.md) for file ownership and precedence.
-Do not write Omarchy, Hyprland, or system configuration.
+Write `state.json` atomically. See [configuration](docs/configuration.md) for
+file ownership and precedence. Do not write Omarchy, Hyprland, or system
+configuration.
 
 A product is a texture, legend, units, timestamp, and source from the engine.
 Level II is what is drawn.

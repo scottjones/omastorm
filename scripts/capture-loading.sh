@@ -4,9 +4,7 @@
 # it goes live on SITE (default KJAX), the map without radar under LOADING;
 # review/loading-after.png is the same daemon once the current volume's
 # lowest cut has been replayed from the bucket. review/loading-none.png is a
-# lean daemon opened with no home at all: the window settles on the network's
-# middle and following hands off to the nearest station at once, so the
-# NO STATION state lasts a frame and the picture is that station loading.
+# lean daemon with no configured centre: the first-run location picker.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p review
@@ -15,7 +13,7 @@ site="${SITE:-KJAX}"
 review="$PWD/review"
 rm -f "$review"/loading-*.png
 config=$(mktemp /tmp/omastorm-loading-config.XXXXXX)
-printf 'home_site = "%s"\n' "$site" > "$config"
+jq -r --arg id "$site" '.sites[] | select(.id==$id) | "center_lat = \(.lat)\ncenter_lon = \(.lon)\nlocked_radar = \"\(.id)\""' engine/data/sites.json > "$config"
 none=$(mktemp /tmp/omastorm-loading-none.XXXXXX)
 : > "$none"
 

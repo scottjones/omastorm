@@ -334,7 +334,7 @@ paints live.
 ## Configuration
 
 `~/.config/omastorm/config.toml` and
-`$XDG_DATA_HOME/omastorm/state.json` are read by the UI, never by the engine.
+`$XDG_STATE_HOME/omastorm/state.json` are read by the UI, never by the engine.
 Explicit preferences override remembered view state. The UI resolves the map
 center and radar lock independently, then sends `select_site`, `lock`,
 `follow`, and settled `view_center` commands as needed. Unlocked navigation
@@ -353,6 +353,8 @@ remembered-view writes so surfaces do not overwrite one another's state.
 On launch, the UI applies explicit config over remembered state. Reconnecting
 to the engine restores the necessary selection and flags without resetting
 the active camera. A change of frame or station never re-centers the map.
+Location picks write state.json. With no location, the popover offers the
+picker instead of inventing a centre.
 
 `hello` additionally includes `pid`, `build` (an opaque fingerprint),
 `sitesSource`, `sitesRetrieved`, and `sitesNotes`. These allow the launcher to

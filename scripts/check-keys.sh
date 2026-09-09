@@ -12,7 +12,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 check_dir="$PWD/target/check-keys"
 mkdir -p "$check_dir"
-# Stokesdale, NC, as Omarchy's weather panel writes it: KFCX (Roanoke) is nearest.
+rm -f "$check_dir/state.json"
+# Stokesdale, NC, as Omarchy's weather panel writes it: the camera sits on
+# the place; KFCX (Roanoke) is the nearest radar.
 printf '{\n  "name": "Stokesdale",\n  "latitude": 36.23708,\n  "longitude": -79.97948\n}\n' > "$check_dir/weather.json"
 cat > "$check_dir/config.toml" <<'TOML'
 treatment = "neon"
@@ -25,7 +27,7 @@ bogus = "x"
 reset = 0
 TOML
 export QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=basic QT_QUICK_BACKEND=rhi QSG_RHI_BACKEND=opengl
-OMASTORM_CONFIG="$check_dir/config.toml" OMASTORM_LOCATION="$check_dir/weather.json" bash run.sh > "$check_dir/log" 2>&1 &
+OMASTORM_CONFIG="$check_dir/config.toml" OMASTORM_LOCATION="$check_dir/weather.json" OMASTORM_STATE="$check_dir/state.json" bash run.sh > "$check_dir/log" 2>&1 &
 pid=$!
 trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
 call() { quickshell ipc --pid "$pid" call keys "$@"; }
@@ -43,7 +45,7 @@ call status > /dev/null || fail "The window's keys IPC never answered"
 # The table over the defaults: the good line applies, every mistake is
 # reported once and leaves its default in place, a key bound twice stays
 # with the first action.
-until_field home KFCX
+until_field site KFCX
 b=$(call bindings)
 [[ $b == *'"pan_left":["A","Left"]'* ]] || fail "pan_left was not rebound: $b"
 [[ $b == *'"zoom_in":["+","="]'* ]] || fail "A bad zoom_in did not keep its default: $b"
@@ -57,7 +59,7 @@ expect 'Six mistakes' 6 "$(grep -o '\[keys\]\|treatment =\|weak_floor =' <<< "$e
 expect 'The status slot names the first and counts the rest' 'TREATMENT = "NEON": NOT PIXELS, GLYPHS, OR STIPPLE (+5 MORE)' "$(field error)"
 expect 'A bad treatment leaves Glyphs' GLYPHS "$(field treatment)"
 expect 'A bad weak_floor leaves the default floor' 5 "$(field weakFloor)"
-expect 'The header names the location home' location "$(field homeSource)"
+expect 'The header names the weather location' weather "$(field locationSource)"
 
 # Each action's effect, through the same function the shortcuts call.
 until_field site KFCX
@@ -91,20 +93,22 @@ call run search
 expect 'The search key opens the picker' true "$(quickshell ipc --pid "$pid" call picker status | grep -o '"open":[a-z]*' | cut -d: -f2)"
 quickshell ipc --pid "$pid" call picker close
 
-# Shift+H saves the station on screen as home_site, above the [keys] table,
-# and the header follows the file through the watch.
-shown=$(field site)
+# Shift+H opens the location picker; a chosen point writes state, never config.
 call run home
-for _ in {1..50}; do grep -q "^home_site = \"$shown\"$" "$check_dir/config.toml" && break; sleep .1; done
-grep -q "^home_site = \"$shown\"$" "$check_dir/config.toml" || fail "Shift+H did not save home_site = \"$shown\"" "$(cat "$check_dir/config.toml")"
-[[ $(grep -n "^home_site\|^\[keys\]" "$check_dir/config.toml" | head -1) == *home_site* ]] || fail "home_site landed inside a table"
-until_field homeSource config
-expect 'The saved home is the station on screen' "$shown" "$(field home)"
+for _ in {1..50}; do [[ $(quickshell ipc --pid "$pid" call location status | grep -o '"open":[a-z]*' | cut -d: -f2) == true ]] && break; sleep .1; done
+expect 'Shift+H opens the location picker' true "$(quickshell ipc --pid "$pid" call location status | grep -o '"open":[a-z]*' | cut -d: -f2)"
+quickshell ipc --pid "$pid" call location go 35.4 -97.5 "Moore"
+until_field lat 35.4
+until_field lon -97.5
+until_field locationSource state
+grep -q '"lat":35.4' "$check_dir/state.json" || fail "Shift+H location did not write state.json" "$(cat "$check_dir/state.json")"
+grep -q home_site "$check_dir/config.toml" && fail "Shift+H wrote home_site into config.toml"
 
 # The fix applies through the file watch: no report, the new key in force,
-# and a configured home_site outranking the location.
+# and an explicit centre outranking the weather location.
 cat > "$check_dir/config.toml" <<'TOML'
-home_site = "KTLX"
+center_lat = 35.333
+center_lon = -97.277
 treatment = "pixels"
 weak_floor = 10
 [keys]
@@ -117,7 +121,8 @@ b=$(call bindings)
 [[ $b == *'"zoom_in":["Z"]'* && $b == *'"search":[]'* ]] || fail "The fixed table did not apply: $b"
 expect 'The treatment setting applies' PIXELS "$(field treatment)"
 expect 'The weak_floor setting applies' 10 "$(field weakFloor)"
-until_field homeSource config
-until_field site KTLX
+until_field locationSource config
+until_field lat 35.333
+until_field lon -97.277
 if rg -q 'TypeError|ReferenceError|Unable to assign|Failed to create.*context|is not a function' "$check_dir/log"; then fail "QML errors in the log"; fi
 echo "KEYS_PASSED"

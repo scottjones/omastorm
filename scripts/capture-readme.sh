@@ -9,7 +9,7 @@ export OMASTORM_ROOT="$PWD" OMASTORM_CONFIG="$scratch/config.toml"
 export QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=basic
 export QT_QUICK_BACKEND=rhi QSG_RHI_BACKEND=opengl
 mkdir -p "$XDG_RUNTIME_DIR" docs/media
-printf 'home_site = "KTLX"\n' > "$OMASTORM_CONFIG"
+jq -r '.sites[] | select(.id=="KTLX") | "center_lat = \(.lat)\ncenter_lon = \(.lon)\nlocked_radar = \"KTLX\""' engine/data/sites.json > "$OMASTORM_CONFIG"
 cleanup() { target/debug/omastorm-engine stop >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 

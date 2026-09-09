@@ -12,7 +12,7 @@ export QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=basic QT_QUICK_BACKEND=rhi
 review="$PWD/review"
 rm -f "$review"/picker-*.png
 scratch=$(mktemp -d /tmp/omastorm-picker.XXXXXX)
-printf 'home_site = "KTLX"\n' > "$scratch/home.toml"
+jq -r '.sites[] | select(.id=="KTLX") | "center_lat = \(.lat)\ncenter_lon = \(.lon)\nlocked_radar = \"KTLX\""' engine/data/sites.json > "$scratch/home.toml"
 bash scripts/cargo.sh build --offline --locked --quiet
 target/debug/omastorm-engine ensure
 sock="$XDG_RUNTIME_DIR/omastorm/engine.sock"

@@ -17,6 +17,8 @@ QtObject {
     property bool incompatible: false
     /// One tile answering this client's `tiles_needed`; a reply, not state.
     signal tileReady(var tile)
+    /// Places answering this client's `search_places`; a reply, not state.
+    signal placesReady(var message)
     readonly property string runtime: Quickshell.env("XDG_RUNTIME_DIR") + "/omastorm/"
     readonly property string texture: state && state.frame ? "file://" + runtime + state.frame.texture : ""
     readonly property string azimuthLut: state && state.frame ? "file://" + runtime + state.frame.azimuthLut : ""
@@ -67,11 +69,13 @@ QtObject {
                 if (!validTilePath(message.path))
                     throw new Error("Invalid tile path: " + JSON.stringify(message.path));
                 tileReady(message);
+            } else if (message.type === "places") {
+                placesReady(message);
             }
         } catch (e) { state = null; error = "Invalid engine message: " + e; }
     }
     function send(command) {
-        if (command.type !== "tiles_needed") rejection = "";
+        if (command.type !== "tiles_needed" && command.type !== "search_places") rejection = "";
         socket.write(JSON.stringify(command) + "\n");
     }
     property var socket: socketFactory.createObject(engine)

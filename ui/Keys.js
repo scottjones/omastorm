@@ -36,12 +36,12 @@ var ACTIONS = [
 // several actions shows each one's first key and names the alternates.
 var ROWS = [
     [{ label: "search sites", actions: ["search"] },
-     { label: "nearest site", actions: ["nearest"] },
-     { label: "lock / release site", actions: ["lock"] },
-     { label: "save site as home", actions: ["home"] },
+     { label: "nearest radar", actions: ["nearest"] },
+     { label: "lock / release radar", actions: ["lock"] },
+     { label: "choose location", actions: ["home"] },
      { label: "pan", actions: ["pan_left", "pan_down", "pan_up", "pan_right"] },
      { label: "zoom", actions: ["zoom_in", "zoom_out"] },
-     { label: "reset to home view", actions: ["reset"] }],
+     { label: "reset to location", actions: ["reset"] }],
     [{ label: "previous frame", actions: ["previous_frame"] },
      { label: "next frame", actions: ["next_frame"] },
      { label: "play / pause", actions: ["play"] },

@@ -10,10 +10,10 @@ engine. The UI sends the commands described in [protocol.md](protocol.md).
 | File | Owner and purpose | Contents |
 | --- | --- | --- |
 | `~/.config/omastorm/config.toml` | User-managed, deliberate preferences | Optional fixed launch center, radar override, treatment, weak-return floor, keybindings |
-| `$XDG_DATA_HOME/omastorm/state.json` | App-managed, remembered session | Last map center, zoom, and optional radar lock chosen in the UI |
+| `$XDG_STATE_HOME/omastorm/state.json` | App-managed, remembered session | Last map center, zoom, and optional radar lock chosen in the UI |
 
-When `XDG_DATA_HOME` is unset, state lives at
-`~/.local/share/omastorm/state.json`. Onboarding, panning, zooming, and UI lock
+When `XDG_STATE_HOME` is unset, state lives at
+`~/.local/state/omastorm/state.json`. Onboarding, panning, zooming, and UI lock
 changes write state, not config. Deleting state resets the remembered session
 without removing deliberate preferences. Missing or invalid state falls back
 to the remaining location sources; it must not prevent startup. Keep state
@@ -35,7 +35,7 @@ A missing location opens a "Choose a location" prompt in the popover; its
 button opens the expanded window's picker. Accepting a location saves the
 view in state. Weather-derived initial coordinates are also saved in state.
 Neither route adds coordinate overrides to config. The picker remains
-available through "Choose location…" after onboarding.
+available through `Shift+H` and LOCATION after onboarding.
 
 Resolve the radar independently: configured `locked_radar`, then a remembered
 UI lock, then the nearest station to the resolved center. A configured radar
@@ -85,16 +85,18 @@ A Jacksonville map center with `locked_radar = "KFCX"` is valid. Honor both
 settings even when the sweep is outside the view. Show the selected station
 and lock, with "Use nearest radar" and "Go to selected radar" available when
 coverage is outside the view. Never relocate the camera or discard the lock
-silently.
+silently. The chrome says `LOCKED · OUTSIDE COVERAGE` when the camera sits
+outside that radar's rings.
 
 For agent-assisted installation, write coordinate overrides only when the
 user requests a fixed launch location. Ordinary installation leaves them
 unset so weather location or onboarding establishes a remembered view.
 
 `OMASTORM_CONFIG` names another config file for checks and captures; a missing
-file is no configuration. `OMASTORM_LOCATION` names another weather file.
-When using an isolated config, checks and captures must also isolate remembered
-state and must not read the desktop's weather location unless explicitly named.
+file is no configuration. `OMASTORM_STATE` names another state file;
+`OMASTORM_LOCATION` names another weather file. When `OMASTORM_CONFIG` is set,
+the machine's own state and weather files are not read unless
+`OMASTORM_STATE` or `OMASTORM_LOCATION` names one.
 
 ## Display and keyboard preferences
 
@@ -108,9 +110,10 @@ state and must not read the desktop's weather location unless explicitly named.
   `OMASTORM_WEAK` (`off` or a number), set by the capture scripts, outranks
   it. Anything else is reported like a bad `treatment` and leaves the default.
 - `[keys]`: one entry per action, laid over the defaults in `ui/Keys.js`:
-  `search` (`/ s`), `nearest` (`n`), `lock` (`Shift+L`), `pan_left`
+  `search` (`/ s`), `nearest` (`n`), `lock` (`Shift+L`), `home` (`Shift+H`,
+  the location picker), `pan_left`
   `pan_down` `pan_up` `pan_right` (`h j k l` and the arrows), `zoom_in`
-  (`+ =`), `zoom_out` (`-`), `reset` (`0`), `previous_frame` (`[`),
+  (`+ =`), `zoom_out` (`-`), `reset` (`0`, the resolved location), `previous_frame` (`[`),
   `next_frame` (`]`), `play` (`Space`), `oldest` (`Home`), `newest` (`End`),
   `pixels` `glyphs` `stipple` (`1 2 3`), `weak` (`w`), `help` (`?`), `close`
   (`Escape`).
@@ -118,4 +121,21 @@ state and must not read the desktop's weather location unless explicitly named.
   unknown action, or a key another action already holds leaves that action
   on its default and is named in the status slot (`[KEYS] ZOOM_IN = "FOO":
   FOO IS NOT A KEY`, with a count of any further mistakes) until the file is
-  fixed; a bad `treatment` or `weak_floor` is reported the same way.
+  fixed; a bad `treatment`, `weak_floor`, centre, or `locked_radar` is
+  reported the same way. `home_site` and `follow` are unused and named if
+  present.
+
+## Remembered state
+
+`~/.local/state/omastorm/state.json` is written atomically (a temporary file
+renamed into place). It holds the last map centre, span in kilometres, and
+the UI radar lock when one is set:
+
+```json
+{"lat":30.332,"lon":-81.656,"span":210,"lock":"KJAX","name":"Jacksonville"}
+```
+
+Invalid fields are dropped. A missing file is no remembered view.
+`OMASTORM_LOCATION` names another weather.json (`name`, `latitude`,
+`longitude`, written by the shell's weather panel) for checks; coordinates
+outside ±90/±180 are ignored.

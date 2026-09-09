@@ -86,6 +86,10 @@ Item {
     function reset() { center = null; span = Math.min(210, maxSpan); }
     function zoom(value) { span = Math.max(25, Math.min(maxSpan, value)); }
     function look(mx, my) { center = Qt.point(longitude(mx), latitude(my)); }
+    // Centre exactly on a place. Loading frames and radar hand-offs must
+    // not call this; the camera is the user's (DESIGN.md, location).
+    function lookAt(lat, lon) { center = Qt.point(lon, lat); }
+    signal resetRequested()
     // The keyboard pan (DESIGN.md, keyboard map): one step is an eighth of
     // the viewport's shorter side, in the given screen direction.
     function pan(dx, dy) {
@@ -104,7 +108,13 @@ Item {
     // is measured at the site's latitude, so it is rescaled to keep the
     // ground scale on screen exactly where it was.
     property real heldKmPerUnit: 0
-    onKmPerUnitChanged: { if (center && heldKmPerUnit > 0) span *= kmPerUnit / heldKmPerUnit; heldKmPerUnit = kmPerUnit; }
+    // Restoring a remembered view sets span itself; a site change under that
+    // restore must not rescale it.
+    property bool holdSpan: false
+    onKmPerUnitChanged: {
+        if (center && heldKmPerUnit > 0 && !holdSpan) span *= kmPerUnit / heldKmPerUnit;
+        heldKmPerUnit = kmPerUnit;
+    }
     function distanceKm(lat1, lon1, lat2, lon2) {
         var r = Math.PI / 180, dp = (lat2 - lat1) * r, dl = (lon2 - lon1) * r;
         var h = Math.sin(dp / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(dl / 2) ** 2;
@@ -139,15 +149,16 @@ Item {
     onUnitsPerPixelChanged: settle.restart()
     // A state change re-asks even for an unchanged rectangle: a restarted
     // engine publishes under a new generation.
-    onScanChanged: { scheduleLayout(); if (scan) { settle.reask = true; settle.restart(); } else reportedLat = NaN; }
+    onScanChanged: { scheduleLayout(); if (scan) { settle.reask = true; settle.restart(); } else { reportedLat = NaN; reportedSpan = NaN; } }
     Timer { id: settle; interval: 120; property bool reask: true; onTriggered: { map.requestTiles(); map.reportCenter(); } }
     // Forgotten when the engine goes away, so a reconnect reports the centre
     // the camera is at rather than the one the old daemon knew.
     property real reportedLat: NaN
     property real reportedLon: NaN
+    property real reportedSpan: NaN
     function reportCenter() {
-        if (!scan || (centerLat === reportedLat && centerLon === reportedLon)) return;
-        reportedLat = centerLat; reportedLon = centerLon;
+        if (!scan || (centerLat === reportedLat && centerLon === reportedLon && span === reportedSpan)) return;
+        reportedLat = centerLat; reportedLon = centerLon; reportedSpan = span;
         viewSettled(centerLat, centerLon);
     }
     function tileRect(z) {
@@ -627,6 +638,6 @@ Item {
             map.zoom(Math.min(map.span,map.maxSpan)*(wheel.angleDelta.y>0?.85:1/.85));
             map.look(mx-(wheel.x-width/2)*map.unitsPerPixel, my-(wheel.y-height/2)*map.unitsPerPixel);
         }
-        onDoubleClicked: map.reset()
+        onDoubleClicked: map.resetRequested()
     }
 }

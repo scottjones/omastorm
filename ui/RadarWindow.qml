@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import "Sites.js" as Sites
 import "Keys.js" as KeyMap
+import "Location.js" as Location
 import "Timeline.js" as Timeline
 
 Item {
@@ -13,12 +14,19 @@ Item {
     property var session: null
     property var shell: null
     property var manifest: null
+    readonly property var store: PluginSession
     property bool opened: session === null
-    function open(payload) { opened = true; if (session) session.windowOpen = true; map.reset(); }
+    function open(payload) {
+        opened = true;
+        if (session) session.windowOpen = true;
+        applyView();
+        if (store.needsLocation || store.pendingLocationPicker) Qt.callLater(() => locationPicker.show(""));
+    }
     function close() {
         if (!opened) return;
         opened = false;
-        if (session) { session.windowOpen = false; session.returnHome(); }
+        store.persist();
+        if (session) session.windowOpen = false;
     }
     function dismiss() {
         if (!session) Qt.quit();
@@ -128,45 +136,47 @@ Item {
         return shown;
     }
     Engine { id: engine }
-    // ~/.config/omastorm/config.toml (docs/protocol.md, configuration). The
-    // home station is selected when the engine's state first arrives and
-    // again after a reconnect (a rebuilt daemon starts on the archived
-    // fixture), with the camera on its home view; the follow setting goes
-    // with it. An edit to the file while the window is open applies at once.
-    // Without a home_site the home is the station nearest Omarchy's own
-    // location (DESIGN.md, site model), when that file has one.
-    Config { id: config }
-    readonly property string homeSource: config.homeSite ? "config" : config.location ? "location" : ""
-    readonly property string homeSite: config.homeSite ? config.homeSite
-        : config.location ? nearestTo(config.location.lat, config.location.lon) : ""
-    function nearestTo(lat, lon) {
-        var best = null, bestKm = Infinity;
-        for (var s of engine.sites) {
-            var km = Sites.distanceKm(lat, lon, s.lat, s.lon);
-            if (km < bestKm) { bestKm = km; best = s; }
-        }
-        return best ? best.id : "";
+    // Deliberate preferences and remembered view (DESIGN.md, location).
+    // PluginSession owns config.toml, state.json, and the camera; this
+    // window applies the view to its map and sends map-local tile requests.
+    readonly property var config: store.config
+    function applyView() {
+        if (!store.hasView) return;
+        map.holdSpan = true;
+        map.lookAt(store.centerLat, store.centerLon);
+        map.span = store.span;
+        Qt.callLater(() => { map.holdSpan = false; });
     }
-    property bool configApplied: false
-    function applyConfig() {
-        if (session || !state || !config.ready || configApplied) return;
-        configApplied = true;
-        if (homeSite) {
-            var home = engine.sites.find(s => s.id === homeSite);
-            if (home && (home.id !== siteId || state.source !== "live")) { map.jumpTo(home.lat, home.lon); engine.send({type: "select_site", id: home.id}); }
-            else if (!home) engine.send({type: "select_site", id: homeSite}); // the engine names the mistake
+    property bool viewApplied: false
+    onStateChanged: {
+        if (!state) viewApplied = false;
+        else {
+            store.initialize();
+            if (!viewApplied) { applyView(); viewApplied = true; }
+            maybeOfferLocation();
         }
-        if (config.follow !== undefined && config.follow !== state.site.follow) engine.send({type: "follow", enabled: config.follow});
     }
-    onStateChanged: { if (!state) configApplied = false; else applyConfig(); }
-    onHomeSiteChanged: { configApplied = false; applyConfig(); }
+    function maybeOfferLocation() {
+        if (!opened || !store.needsLocation || locationPicker.open) return;
+        Qt.callLater(() => {
+            if (app.opened && app.store.needsLocation && !locationPicker.open) locationPicker.show("");
+        });
+    }
+    Connections {
+        target: store
+        function onViewChanged() {
+            if (app.opened) app.applyView();
+            app.maybeOfferLocation();
+        }
+        function onLocationPickerRequested() { if (app.opened) locationPicker.show(""); }
+    }
     Connections {
         target: config
-        function onReadyChanged() { app.applyConfig(); }
-        function onFollowChanged() { app.configApplied = false; app.applyConfig(); }
+        function onReadyChanged() { app.applyView(); }
         function onKeysChanged() { app.applySettings(); }
         function onTreatmentChanged() { app.applySettings(); }
         function onWeakFloorChanged() { app.applySettings(); }
+        function onValuesChanged() { app.applySettings(); }
     }
     // The keyboard map (DESIGN.md, keyboard map as built): Keys.js lays the
     // `[keys]` table over the defaults, asking Qt whether each sequence
@@ -181,7 +191,8 @@ Item {
     Shortcut { id: probe; enabled: false }
     function canon(sequence) { probe.sequence = sequence; return probe.portableText; }
     function applySettings() {
-        var errors = [], wanted = KeyMap.treatment(config.treatment, errors), floor = KeyMap.weakFloor(config.weakFloor, errors);
+        var errors = Location.configErrors(config.values);
+        var wanted = KeyMap.treatment(config.treatment, errors), floor = KeyMap.weakFloor(config.weakFloor, errors);
         var resolved = KeyMap.resolve(config.keys, canon);
         bindings = resolved.bindings;
         configErrors = errors.concat(resolved.errors);
@@ -189,20 +200,20 @@ Item {
         if (!session && KeyMap.envFloor(Quickshell.env("OMASTORM_WEAK")) === undefined) weakFloor = floor;
     }
     Component.onCompleted: applySettings()
-    readonly property bool overlayOpen: picker.open || sheet.open
+    readonly property bool overlayOpen: picker.open || locationPicker.open || sheet.open
     function run(action) {
         switch (action) {
         case "search": treatmentMenu.close(); picker.show(""); break;
         case "nearest": nearest(); break;
         case "lock": toggleLock(); break;
-        case "home": setHome(); break;
+        case "home": locationPicker.show(""); break;
         case "pan_left": map.pan(-1, 0); break;
         case "pan_right": map.pan(1, 0); break;
         case "pan_up": map.pan(0, -1); break;
         case "pan_down": map.pan(0, 1); break;
         case "zoom_in": map.zoom(Math.min(map.span, map.maxSpan) / 1.25); break;
         case "zoom_out": map.zoom(Math.min(map.span, map.maxSpan) * 1.25); break;
-        case "reset": map.reset(); break;
+        case "reset": resetView(); break;
         case "previous_frame": step(-1); break;
         case "next_frame": step(1); break;
         case "play": togglePlay(); break;
@@ -226,40 +237,38 @@ Item {
         function status(): string {
             return JSON.stringify({sheet: sheet.open, menu: treatmentMenu.opened, treatment: app.treatment, weakFloor: app.weakFloor === null ? "off" : app.weakFloor, error: app.configError,
                                    span: Math.round(map.span * 10) / 10, lat: Math.round(map.centerLat * 1000) / 1000, lon: Math.round(map.centerLon * 1000) / 1000,
-                                   home: app.homeSite, homeSource: app.homeSource, site: app.siteId, locked: app.locked});
+                                   locationSource: app.store.locationSource, needsLocation: app.store.needsLocation,
+                                   site: app.siteId, locked: app.locked, lockSource: app.store.lockSource, outsideCoverage: app.outsideCoverage});
         }
     }
-    // Site navigation (DESIGN.md, markers): the lock pins the station against
-    // hand-offs; `n` releases it, takes the station nearest the map centre,
-    // and puts the camera on that station's home view.
+    // Site navigation (DESIGN.md, location): the lock pins the radar against
+    // hand-offs without moving the camera; `n` releases it and selects the
+    // nearest radar. The site picker locks. Neither moves the camera.
     readonly property bool locked: state ? state.site.locked : false
     readonly property bool following: state ? state.site.follow && !state.site.locked : false
-    function toggleLock() { if (state) engine.send({type: "lock", enabled: !locked}); }
-    // Shift+H or the HOME control: the station on screen becomes home_site in
-    // config.toml (Config.setHome); the status slot confirms it for a moment
-    // and the header's HOME tag follows the file.
+    readonly property var resetTarget: Location.resolveReset(Location.configCenter(config.values), config.location)
+    readonly property bool outsideCoverage: {
+        var s = engine.site;
+        return !!(locked && s && Location.distanceKm(map.centerLat, map.centerLon, s.lat, s.lon) > map.coverageKm);
+    }
+    function toggleLock() {
+        if (!state || !siteId) return;
+        store.setLock(locked ? "" : siteId, !locked);
+    }
     property string notice: ""
     Timer { id: noticeTimer; interval: 3000; onTriggered: app.notice = "" }
-    function setHome() {
-        if (!state || !siteId) return;
-        config.setHome(siteId);
-        notice = "HOME · " + siteId + " SAVED TO CONFIG.TOML";
-        noticeTimer.restart();
+    function resetView() {
+        store.resetView();
+        applyView();
     }
     function nearest() {
         var s = map.nearest();
         if (!state || !s) return;
-        if (locked) engine.send({type: "lock", enabled: false});
-        map.jumpTo(s.lat, s.lon);
-        engine.send({type: "select_site", id: s.id});
+        store.followNearest(s.id);
     }
-    // A station chosen in the picker is selected, locked (DESIGN.md,
-    // markers), and given the camera the way `n` does.
     function choose(s) {
         if (!state) return;
-        map.jumpTo(s.lat, s.lon);
-        engine.send({type: "select_site", id: s.id});
-        if (!locked) engine.send({type: "lock", enabled: true});
+        store.setLock(s.id, true);
     }
     // Drives the picker from outside for checks and captures:
     // quickshell ipc --pid <pid> call picker open tul
@@ -271,6 +280,18 @@ Item {
         function move(delta: int): void { picker.move(delta); }
         function matches(): string { return JSON.stringify(picker.rows.map(r => r.site.id)); }
         function status(): string { return JSON.stringify({open: picker.open, query: picker.query, selected: picker.selected, total: picker.ranked.total, focused: picker.fieldFocused}); }
+    }
+    IpcHandler {
+        target: "location"
+        function open(query: string): void { locationPicker.show(query); }
+        function accept(): void { locationPicker.accept(); }
+        function close(): void { locationPicker.close(); }
+        function move(delta: int): void { locationPicker.move(delta); }
+        function go(lat: string, lon: string, name: string): void { locationPicker.go(Number(lat), Number(lon), name); }
+        function setLat(text: string): void { locationPicker.latText = text; }
+        function setLon(text: string): void { locationPicker.lonText = text; }
+        function matches(): string { return JSON.stringify(locationPicker.rows.map(r => r.where ? r.name + ", " + r.where : r.name)); }
+        function status(): string { return JSON.stringify({open: locationPicker.open, query: locationPicker.query, selected: locationPicker.selected, focused: locationPicker.fieldFocused, count: locationPicker.rows.length, lat: locationPicker.latText, lon: locationPicker.lonText, error: locationPicker.coordError}); }
     }
     readonly property var theme: session ? session.theme.snapshot : themeInputs.snapshot
     Theme { id: themeInputs; registerIpc: !app.session }
@@ -288,7 +309,7 @@ Item {
         target: app.session
         function onTreatmentChanged() { app.treatment = app.session.treatment; }
         function onWeakFloorChanged() { app.weakFloor = app.session.weakFloor; }
-        function onHomeRequested() { if (app.opened) map.reset(); }
+        function onLocationPickerRequested() { if (app.opened) locationPicker.show(""); }
     }
     // Quickshell keeps the process alive after its last window closes, which
     // left 400-600 MB orphans behind every close. Quit with the window; the
@@ -431,14 +452,17 @@ Item {
                     visible: app.locked || app.following
                     readonly property color ink: app.locked ? app.theme.accent : Qt.alpha(app.theme.foreground, .55)
                     Glyph { glyph: app.locked ? "lock" : "follow"; ink: siteChip.ink }
-                    LabelText { text: app.locked ? "LOCKED" : "FOLLOWING"; visible: !win.compact; color: siteChip.ink; font.pixelSize: 10; font.letterSpacing: 1 }
+                    LabelText {
+                        text: app.locked && app.outsideCoverage ? "LOCKED · OUTSIDE COVERAGE" : app.locked ? "LOCKED" : "FOLLOWING"
+                        visible: !win.compact; color: siteChip.ink; font.pixelSize: 10; font.letterSpacing: 1
+                    }
                 }
-                // Where the home came from, while the home station is shown
-                // (DESIGN.md, site model): the configured home_site, or the
-                // station nearest Omarchy's weather location.
                 LabelText {
-                    visible: !win.compact && app.homeSite !== "" && app.siteId === app.homeSite
-                    text: app.homeSource === "location" ? "HOME · NEAR " + (config.location.name || "OMARCHY'S LOCATION").toUpperCase() : "HOME · CONFIG.TOML"
+                    visible: !win.compact && !!app.resetTarget && Location.distanceKm(map.centerLat, map.centerLon, app.resetTarget.lat, app.resetTarget.lon) < 2
+                    text: !app.resetTarget ? ""
+                        : app.resetTarget.source === "weather"
+                        ? "LOCATION · " + (app.resetTarget.name || "OMARCHY'S LOCATION").toUpperCase()
+                        : "LOCATION · CONFIG.TOML"
                     color: Qt.alpha(app.theme.foreground, .55)
                     font.pixelSize: 10; font.letterSpacing: 1
                     Layout.leftMargin: 10
@@ -463,10 +487,10 @@ Item {
                 // config.toml mistake stands there the same way until the
                 // file is fixed. The radar underneath stays clear.
                 LabelText {
-                    text: engine.rejection || app.configError || app.notice || app.sourceDetail
-                    color: engine.rejection || app.configError || app.notice ? app.theme.accent : app.conditionColor
-                    opacity: engine.rejection || app.configError || app.notice || app.alert ? 1 : .5
-                    visible: !win.compact || engine.rejection !== "" || app.configError !== "" || app.notice !== "" || app.alert
+                    text: engine.rejection || app.configError || store.persistError || app.notice || app.sourceDetail
+                    color: engine.rejection || app.configError || store.persistError || app.notice ? app.theme.accent : app.conditionColor
+                    opacity: engine.rejection || app.configError || store.persistError || app.notice || app.alert ? 1 : .5
+                    visible: !win.compact || engine.rejection !== "" || app.configError !== "" || store.persistError !== "" || app.notice !== "" || app.alert
                     horizontalAlignment: Text.AlignRight
                     Layout.fillWidth: true
                 }
@@ -496,12 +520,13 @@ Item {
                     locked: app.locked
                     // A settled pan hands the centre to the engine, which switches
                     // station while following and unlocked; the camera stays.
-                    onViewSettled: (lat, lon) => { if (app.opened) engine.send({type: "view_center", lat: lat, lon: lon}); }
-                    // Captures start the camera at OMASTORM_VIEW="lat,lon,spanKm".
-                    Component.onCompleted: {
-                        var view = (Quickshell.env("OMASTORM_VIEW") || "").split(",").map(Number);
-                        if (view.length === 3 && view.every(isFinite)) { center = Qt.point(view[1], view[0]); span = view[2]; }
+                    onViewSettled: (lat, lon) => {
+                        if (!app.opened || app.store.needsLocation) return;
+                        engine.send({type: "view_center", lat: lat, lon: lon});
+                        app.store.rememberView(lat, lon, map.span);
                     }
+                    onResetRequested: app.resetView()
+                    Component.onCompleted: app.applyView()
                     // The map asks for tiles when its camera settles and the
                     // engine answers this window alone, tile by tile.
                     onTilesNeeded: (z, x0, y0, x1, y1) => engine.send({type: "tiles_needed", z: z, x0: x0, y0: y0, x1: x1, y1: y1})
@@ -704,8 +729,7 @@ Item {
                     }
                 }
                 GlyphButton { glyph: app.locked ? "lock" : "follow"; selected: app.locked; enabled: !!app.state; onClicked: app.toggleLock() }
-                // Save the station on screen as home; away once it is the home.
-                Control { text: win.compact ? "⌂" : "⌂ HOME"; visible: !!app.state && app.siteId !== "" && app.siteId !== app.homeSite; onClicked: app.setHome() }
+                Control { text: win.compact ? "⌂" : "⌂ LOCATION"; onClicked: locationPicker.show("") }
                 Item { Layout.fillWidth: true }
                 // The treatment chip (DESIGN.md, treatment control): one
                 // low-emphasis control naming the treatment; click opens the
@@ -733,7 +757,7 @@ Item {
                 Rectangle { width: 1; height: 18; color: Qt.alpha(app.theme.foreground, .22); Layout.leftMargin: 4; Layout.rightMargin: 4; visible: !win.compact }
                 Control { text: "−"; visible: !win.compact; onClicked: map.zoom(Math.min(map.span,map.maxSpan)*1.25) }
                 Control { text: "+"; visible: !win.compact; onClicked: map.zoom(Math.min(map.span,map.maxSpan)/1.25) }
-                Control { text: "RESET"; onClicked: map.reset() }
+                Control { text: "RESET"; onClicked: app.resetView() }
             }
             LabelText {
                 Layout.fillWidth: true
@@ -749,10 +773,27 @@ Item {
             theme: app.theme
             centerLat: map.centerLat
             centerLon: map.centerLon
-            homeSite: app.homeSite
+            homeSite: ""
             compact: win.compact
             cardTop: layout.anchors.margins + mapFrame.y
             onChosen: site => app.choose(site)
+          }
+          LocationPicker {
+            id: locationPicker
+            anchors.fill: parent
+            theme: app.theme
+            engine: engine
+            closeOnScrim: !app.store.needsLocation
+            centerLat: map.centerLat
+            centerLon: map.centerLon
+            compact: win.compact
+            cardTop: layout.anchors.margins + mapFrame.y
+            onChosen: (lat, lon, name) => {
+                app.store.setPlace(lat, lon, name);
+                app.applyView();
+                app.notice = name ? "LOCATION · " + name.toUpperCase() : "LOCATION · " + lat.toFixed(4) + ", " + lon.toFixed(4);
+                noticeTimer.restart();
+            }
           }
           // The treatment menu over the surface (not a Popup, which the
           // window overlay would draw outside the captured surface): a card

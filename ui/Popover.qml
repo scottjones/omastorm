@@ -114,8 +114,20 @@ FocusScope {
                 labelSize: 10
                 radarOpacity: card.condition === "unavailable" ? .6 : 1
                 onTilesNeeded: (z, x0, y0, x1, y1) => connection.send({type: "tiles_needed", z: z, x0: x0, y0: y0, x1: x1, y1: y1})
+                function applyView() {
+                    if (!card.session.hasView) return;
+                    holdSpan = true;
+                    lookAt(card.session.centerLat, card.session.centerLon);
+                    span = card.session.span;
+                    Qt.callLater(() => { holdSpan = false; });
+                }
+                Component.onCompleted: applyView()
             }
             Connections { target: connection; function onTileReady(tile) { map.tileReady(tile); } }
+            Connections {
+                target: card.session
+                function onViewChanged() { map.applyView(); }
+            }
             Label { anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 8; text: "⤢"; font.pixelSize: 20; opacity: .65 }
             RowLayout {
                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 8
@@ -139,6 +151,25 @@ FocusScope {
                 horizontalAlignment: Text.AlignHCenter
                 visible: !card.state
                 text: card.session.startupError || connection.error
+            }
+            Rectangle {
+                anchors.fill: parent
+                visible: card.session.needsLocation
+                color: Qt.alpha(card.theme.background, .82)
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: { card.session.requestLocationPicker(); card.expandRequested(); }
+                }
+                ColumnLayout {
+                    anchors.centerIn: parent
+                    width: parent.width - 32
+                    spacing: 10
+                    Label { Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; text: "CHOOSE A LOCATION"; font.bold: true; font.pixelSize: 13 }
+                    Label { Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; opacity: .7; font.pixelSize: 11
+                        text: "Search a town of 5,000+ people, or enter latitude and longitude in the window." }
+                    Control { Layout.alignment: Qt.AlignHCenter; text: "CHOOSE A LOCATION"; onClicked: { card.session.requestLocationPicker(); card.expandRequested(); } }
+                }
             }
         }
         Label {
@@ -185,14 +216,10 @@ FocusScope {
         RowLayout {
             Layout.fillWidth: true
             Label {
-                Layout.fillWidth: true; font.pixelSize: 10; opacity: .55; wrapMode: Text.Wrap
-                text: "click radar or ↵ opens the window · " + (card.bindings.previous_frame || []).join("/") + " " + (card.bindings.next_frame || []).join("/") + " step · " + (card.bindings.play || []).join("/") + " play"
+                Layout.fillWidth: true; font.pixelSize: 8; opacity: .5; elide: Text.ElideRight
+                text: map.osmOnScreen ? "NOAA · © OpenStreetMap" : "NOAA · Natural Earth"
             }
-            Control { text: "⤢ EXPAND"; onClicked: card.expandRequested() }
-        }
-        Label {
-            Layout.fillWidth: true; font.pixelSize: 8; opacity: .5; wrapMode: Text.Wrap
-            text: "NOAA · Natural Earth · " + (map.osmOnScreen && card.state ? card.state.basemap.osm.attribution : "© OpenStreetMap contributors (ODbL)")
+            Control { text: "EXPAND"; onClicked: card.expandRequested() }
         }
     }
 }

@@ -7,9 +7,11 @@ scratch=$(mktemp -d /tmp/omastorm-popover.XXXXXX)
 export XDG_RUNTIME_DIR="$scratch/runtime" XDG_CACHE_HOME="$scratch/cache"
 export QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=basic QT_QUICK_BACKEND=rhi QSG_RHI_BACKEND=opengl
 export OMASTORM_CONFIG="$scratch/config.toml"
+export OMASTORM_STATE="$scratch/state.json"
 export OMASTORM_ROOT="$PWD"
 mkdir -p "$XDG_RUNTIME_DIR"
 : > "$OMASTORM_CONFIG"
+jq -c '.sites[] | select(.id=="KTLX") | {lat, lon, span: 210}' engine/data/sites.json > "$OMASTORM_STATE"
 pid=
 cleanup() {
   [[ -z $pid ]] || kill "$pid" 2>/dev/null || true
@@ -81,11 +83,11 @@ tell '{"type":"select_site","id":"KTLX"}' '{"type":"seek","id":"popover-test-0"}
 until_status '.frame == "popover-test-0"'
 call expand
 until_status '.window and .windowFrame == "popover-test-0" and (.windowPlaying | not)'
-# Home edits apply immediately; subsequently selecting another station must
-# survive expansion, and closing the window returns to the configured home.
-printf 'home_site = "KFCX"\n' > "$OMASTORM_CONFIG"
+# A configured lock applies immediately; subsequently selecting another
+# station must survive expansion, and closing the window leaves it there.
+printf 'locked_radar = "KFCX"\n' > "$OMASTORM_CONFIG"
 until_status '.site == "KFCX"'
-tell '{"type":"select_site","id":"KTLX"}' '{"type":"seek","id":"popover-test-0"}'
+tell '{"type":"select_site","id":"KTLX"}' '{"type":"lock","enabled":true}' '{"type":"seek","id":"popover-test-0"}'
 until_status '.frame == "popover-test-0"'
 call step 1
 until_status '.frame == "popover-test-1" and .windowFrame == "popover-test-1"'
@@ -96,8 +98,10 @@ call reopen
 call expand
 until_status '.playing and .windowPlaying and .site == "KTLX"'
 call closeWindow
-until_status '.window == false and .site == "KFCX"'
+until_status '.window == false and .site == "KTLX"'
 # A stopped daemon followed by ensure must reconnect all surviving clients.
+# Reconnect keeps the session lock and camera; this process never unlocked,
+# so KFCX is selected again.
 target/debug/omastorm-engine stop
 until_status '.connected == false'
 target/debug/omastorm-engine ensure
@@ -106,4 +110,4 @@ call quit
 wait "$pid"
 pid=
 if rg 'Binding loop|ReferenceError|TypeError|Unable to assign|Failed to load' "$scratch/ui.log"; then fail 'QML runtime errors'; fi
-echo 'Popover: archived provenance, expand preservation, treatment sharing, close/reopen, playback, home return, daemon restart PASS'
+echo 'Popover: archived provenance, expand preservation, treatment sharing, close/reopen, playback, lock, daemon restart PASS'

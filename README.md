@@ -73,13 +73,16 @@ Update with `omarchy plugin update com.omastorm.radar`.
 
 ## Use
 
-Click the mark in the bar for the popover: the selected station, LIVE or the
-connection condition, the actual scan time, step and play, and EXPAND. Click
-the radar or press Enter for the window; it opens on the same station and
-frame and map view. Closing preserves your view for the next launch.
+Click the mark in the bar for the popover: the map at your location, LIVE or
+the connection condition, the actual scan time, step and play, and EXPAND.
+If no location is known, the popover offers “Choose a location,” which opens
+the picker in the window. Click the radar or press Enter for the window; it
+opens on the same station, frame, and camera. Closing preserves your view
+for the next launch.
 
 In the window, drag to pan and scroll to zoom. The map follows the nearest
-station as you pan unless you lock it. A station you arrive at fetches its last
+station as you pan unless you lock it; a locked radar stays put even when
+the camera leaves its coverage. A station you arrive at fetches its last
 dozen scans, so there is a loop to play within a few seconds; the cache then
 grows to 60 as new scans arrive. The status slot shows the age of the frame on
 screen: LIVE, STALE after ten minutes, UNAVAILABLE or OFFLINE when the feed
@@ -89,10 +92,11 @@ cannot be reached, with cached frames kept.
 | --- | --- |
 | `h` `j` `k` `l` or arrows | Pan |
 | `+` `-` | Zoom |
-| `0` | Reset view |
+| `0` | Reset to the configured or weather location |
 | `/` or `s` | Search sites |
 | `n` | Nearest site |
 | `Shift+L` | Lock the station |
+| `Shift+H` | Choose a location |
 | `Space` | Loop the frames |
 | `[` `]` | Step a frame |
 | `Home` `End` | Oldest or newest frame |
@@ -108,8 +112,9 @@ are hidden by default and the legend says so; `w` shows them.
 
 `~/.config/omastorm/config.toml` holds deliberate preferences. The app saves
 last map center, zoom, and UI radar lock separately in
-`$XDG_DATA_HOME/omastorm/state.json` (default
-`~/.local/share/omastorm/state.json`). Navigation never rewrites your config.
+`$XDG_STATE_HOME/omastorm/state.json` (default
+`~/.local/state/omastorm/state.json`). Navigation never rewrites your config.
+`Shift+H`, or LOCATION, opens the location picker; it writes state, not config.
 
 Explicit center coordinates win on every launch. Without them, Omastorm
 restores your last view, then falls back to the weather location or location
@@ -171,6 +176,8 @@ This is a beta. Bugs, rough edges, and ideas go to
 Radar: NOAA NEXRAD Level II via the NOAA Open Data program on AWS. Basemap: ©
 OpenStreetMap contributors, [ODbL](https://opendatacommons.org/licenses/odbl/1-0/),
 tiles by [OpenFreeMap](https://openfreemap.org); Natural Earth, public domain.
+Location search: [GeoNames](https://www.geonames.org/),
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 Code: MIT, see [LICENSE](LICENSE).
 
 ## Contributing

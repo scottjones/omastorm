@@ -34,6 +34,14 @@ run = [
 description = "Launch the window against the shared debug daemon (needs GPU Quickshell)"
 run = "bash run.sh"
 
+[tasks.restart]
+description = "Stop the shared debug daemon, then launch this checkout's window"
+run = "bash -c 'test -x target/debug/omastorm-engine && target/debug/omastorm-engine stop || true; exec bash run.sh'"
+
+[tasks.onboard]
+description = "Launch this checkout with no weather or remembered view (location picker)"
+run = "mkdir -p target && : > target/onboard-state.json && OMASTORM_LOCATION=/dev/null OMASTORM_STATE=$PWD/target/onboard-state.json bash run.sh"
+
 [tasks.stop]
 description = "End the shared debug daemon"
 run = "target/debug/omastorm-engine stop"
