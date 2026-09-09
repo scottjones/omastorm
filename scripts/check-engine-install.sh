@@ -7,6 +7,15 @@
 # for real and its asset must hash to the pin, speak the protocol the UI
 # accepts, and report the version its tag names.
 set -euo pipefail
+# Ubuntu CI verifies installation and checksums for the published Arch binary,
+# whose newer glibc requirements prevent execution there. Native candidates
+# are executed separately; normal desktop checks always run the pinned one.
+published_runtime=true
+if [[ ${1:-} == --published-install-only ]]; then
+  published_runtime=false
+  shift
+fi
+[[ $# == 0 ]] || { echo 'Usage: check-engine-install.sh [--published-install-only]' >&2; exit 2; }
 cd "$(dirname "$0")/.."
 
 fail() { printf '%s\n' "$@" >&2; exit 1; }
@@ -129,6 +138,10 @@ else
 fi
 if [[ -x $dest ]]; then
   [[ $(sha256sum -- "$dest" | awk '{print $1}') == "$committed" ]] || fail 'Pinned asset install did not match the pin'
+  if [[ $published_runtime == false ]]; then
+    echo 'Engine install fixtures and published asset checksum PASS; published runtime explicitly omitted (host libc compatibility).'
+    exit 0
+  fi
   "$dest" ensure
   hello=$(timeout 2 socat -t0.2 - "UNIX-CONNECT:$XDG_RUNTIME_DIR/omastorm/engine.sock" < /dev/null | head -n1 || true)
   "$dest" stop >/dev/null
