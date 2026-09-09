@@ -3,8 +3,9 @@ use std::{
     fs,
     io::{BufRead, BufReader, Write},
     os::unix::net::{UnixListener, UnixStream},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
+    sync::{Mutex, MutexGuard},
     thread,
     time::{Duration, Instant},
 };
@@ -15,18 +16,55 @@ const ARCHIVE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../data/raw/KTLX20130520_201643_V06.gz"
 );
+/// How long a daemon may take to decode the archive and listen, and how long
+/// a reply may take. Both are far above the usual fraction of a second, so a
+/// busy machine gets a slow test rather than a failed one; they only bound
+/// how long a genuinely hung daemon holds the suite.
+const STARTUP: Duration = Duration::from_secs(30);
+const REPLY: Duration = Duration::from_secs(10);
+/// One daemon at a time. Each test starts its own; run at once they compete
+/// for the CPU with each other and with whatever else the machine is doing,
+/// and the suite has missed a reply (`WouldBlock`) or a launch under that
+/// load. Serial, each daemon's timing is its own.
+static SERIAL: Mutex<()> = Mutex::new(());
+fn serial() -> MutexGuard<'static, ()> {
+    // A failed test poisons the lock; the next test is still its own.
+    SERIAL.lock().unwrap_or_else(|e| e.into_inner())
+}
+/// A fresh scratch `XDG_RUNTIME_DIR` under `target/` for this test. An
+/// interrupted run leaves its tree behind, and a later process with the same
+/// PID would otherwise find a socket file no daemon listens on.
+fn scratch_root(name: &str) -> PathBuf {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
+        "../target/t-{name}-{}-{:?}",
+        std::process::id(),
+        thread::current().id()
+    ));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    root
+}
+/// Connect once the daemon under `root` listens, within `STARTUP`; `alive`
+/// fails early when the daemon has already exited.
+fn await_daemon(root: &Path, mut alive: impl FnMut() -> bool) -> BufReader<UnixStream> {
+    let deadline = Instant::now() + STARTUP;
+    loop {
+        if let Ok(stream) = UnixStream::connect(root.join("omastorm/engine.sock")) {
+            stream.set_read_timeout(Some(REPLY)).unwrap();
+            return BufReader::new(stream);
+        }
+        assert!(alive(), "engine exited");
+        assert!(Instant::now() < deadline, "engine startup timed out");
+        thread::sleep(Duration::from_millis(10));
+    }
+}
 struct Engine {
     child: Child,
     root: PathBuf,
 }
 impl Engine {
     fn start() -> Self {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
-            "../target/t-{}-{:?}",
-            std::process::id(),
-            thread::current().id()
-        ));
-        fs::create_dir_all(&root).unwrap();
+        let root = scratch_root("engine");
         let child = Command::new(env!("CARGO_BIN_EXE_omastorm-engine"))
             .env("OMASTORM_ARCHIVE", ARCHIVE)
             .env("XDG_RUNTIME_DIR", &root)
@@ -34,19 +72,12 @@ impl Engine {
             .spawn()
             .unwrap();
         let mut engine = Self { child, root };
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while !engine.root.join("omastorm/engine.sock").exists() {
-            assert!(engine.child.try_wait().unwrap().is_none(), "engine exited");
-            assert!(Instant::now() < deadline, "engine startup timed out");
-            thread::sleep(Duration::from_millis(10));
-        }
+        await_daemon(&engine.root, || engine.child.try_wait().unwrap().is_none());
         engine
     }
     fn connect(&self) -> BufReader<UnixStream> {
         let stream = UnixStream::connect(self.root.join("omastorm/engine.sock")).unwrap();
-        stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
-            .unwrap();
+        stream.set_read_timeout(Some(REPLY)).unwrap();
         BufReader::new(stream)
     }
 }
@@ -76,6 +107,7 @@ fn state(client: &mut BufReader<UnixStream>, predicate: impl Fn(&Value) -> bool)
 }
 #[test]
 fn fixture_transport_and_shared_commands() {
+    let _serial = serial();
     let engine = Engine::start();
     let mut first = engine.connect();
     let hello = read(&mut first);
@@ -277,6 +309,7 @@ fn fixture_transport_and_shared_commands() {
 }
 #[test]
 fn crash_recovery_and_immutable_revisions() {
+    let _serial = serial();
     let mut engine = Engine::start();
     let mut client = engine.connect();
     read(&mut client);
@@ -293,14 +326,7 @@ fn crash_recovery_and_immutable_revisions() {
         .env("XDG_RUNTIME_DIR", &engine.root)
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
-    let mut client = loop {
-        if let Ok(stream) = UnixStream::connect(engine.root.join("omastorm/engine.sock")) {
-            break BufReader::new(stream);
-        }
-        assert!(Instant::now() < deadline);
-        thread::sleep(Duration::from_millis(10));
-    };
+    let mut client = await_daemon(&engine.root, || engine.child.try_wait().unwrap().is_none());
     read(&mut client);
     let new = read(&mut client)["frame"]["texture"]
         .as_str()
@@ -333,6 +359,7 @@ fn crash_recovery_and_immutable_revisions() {
 }
 #[test]
 fn oversized_client_is_disconnected_without_harming_server() {
+    let _serial = serial();
     let engine = Engine::start();
     let mut bad = engine.connect();
     read(&mut bad);
@@ -346,14 +373,10 @@ fn oversized_client_is_disconnected_without_harming_server() {
 }
 #[test]
 fn launcher_replaces_a_daemon_of_another_build() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
-        "../target/t-{}-{:?}",
-        std::process::id(),
-        thread::current().id()
-    ));
+    let _serial = serial();
+    let root = scratch_root("launcher");
     let dir = root.join("omastorm");
     fs::create_dir_all(&dir).unwrap();
-    let _ = fs::remove_file(dir.join("engine.sock"));
     let listener = UnixListener::bind(dir.join("engine.sock")).unwrap();
     // Stand in for a daemon left over from an earlier build: a real process
     // that the launcher must end, whose PID the socket reports. It answers the
@@ -389,9 +412,7 @@ fn launcher_replaces_a_daemon_of_another_build() {
         "the stale process was terminated: {status}"
     );
     let stream = UnixStream::connect(dir.join("engine.sock")).unwrap();
-    stream
-        .set_read_timeout(Some(Duration::from_secs(2)))
-        .unwrap();
+    stream.set_read_timeout(Some(REPLY)).unwrap();
     let mut client = BufReader::new(stream);
     let hello = read(&mut client);
     assert_eq!(hello["type"], "hello");
@@ -415,13 +436,7 @@ fn launcher_replaces_a_daemon_of_another_build() {
 }
 #[test]
 fn stop_with_no_daemon_is_quiet_and_leaves_nothing_behind() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
-        "../target/t-{}-{:?}",
-        std::process::id(),
-        thread::current().id()
-    ));
-    let _ = fs::remove_dir_all(&root);
-    fs::create_dir_all(&root).unwrap();
+    let root = scratch_root("stop");
     let output = Command::new(env!("CARGO_BIN_EXE_omastorm-engine"))
         .env("OMASTORM_ARCHIVE", ARCHIVE)
         .arg("stop")
@@ -443,6 +458,7 @@ fn stop_with_no_daemon_is_quiet_and_leaves_nothing_behind() {
 }
 #[test]
 fn tiles_needed_is_answered_tile_by_tile_to_the_sender() {
+    let _serial = serial();
     let engine = Engine::start();
     let mut asker = engine.connect();
     read(&mut asker);
@@ -536,27 +552,15 @@ fn tiles_needed_is_answered_tile_by_tile_to_the_sender() {
 /// to draw, an empty timeline, `loading` until a client selects a site.
 #[test]
 fn a_lean_start_has_no_frame_until_a_site_is_selected() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join(format!("../target/t-lean-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&root);
-    fs::create_dir_all(&root).unwrap();
+    let _serial = serial();
+    let root = scratch_root("lean");
     let mut child = Command::new(env!("CARGO_BIN_EXE_omastorm-engine"))
         .env("XDG_RUNTIME_DIR", &root)
         .env_remove("OMASTORM_ARCHIVE")
         .stdout(Stdio::null())
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while !root.join("omastorm/engine.sock").exists() {
-        assert!(child.try_wait().unwrap().is_none(), "engine exited");
-        assert!(Instant::now() < deadline, "engine startup timed out");
-        thread::sleep(Duration::from_millis(10));
-    }
-    let stream = UnixStream::connect(root.join("omastorm/engine.sock")).unwrap();
-    stream
-        .set_read_timeout(Some(Duration::from_secs(2)))
-        .unwrap();
-    let mut client = BufReader::new(stream);
+    let mut client = await_daemon(&root, || child.try_wait().unwrap().is_none());
     let hello = read(&mut client);
     assert_eq!(hello["type"], "hello");
     let initial = read(&mut client);
