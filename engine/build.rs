@@ -2,7 +2,9 @@
 //! downloads into the geography the binary embeds (DESIGN.md, basemap tiles,
 //! shipped geography): one polyline blob holding the 1:50m world set and the
 //! 1:10m set clipped to the NEXRAD network envelope, and the populated places
-//! for low-zoom labels. Reruns only when an input changes.
+//! for low-zoom labels. GeoNames cities with population ≥ 5000, clipped to
+//! the same envelope, become the location-picker gazetteer. Reruns only when
+//! an input changes.
 //!
 //! Blob layout (`ne.bin`, read by `src/tiles.rs`): the magic `OMNE\x01`, then
 //! for each of the two sets (1:50m, 1:10m) and each of its two layers
@@ -32,7 +34,11 @@ fn main() {
     let out = env::var_os("OUT_DIR").expect("OUT_DIR");
     let manifest = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
     let raw = Path::new(&manifest).join(RAW);
-    let mut inputs = vec!["places.geojson".to_owned()];
+    let mut inputs = vec![
+        "places.geojson".to_owned(),
+        "cities5000.txt".to_owned(),
+        "admin1CodesASCII.txt".to_owned(),
+    ];
     for scale in ["50m", "10m"] {
         for (theme, _) in THEMES {
             inputs.push(format!("ne_{scale}_{theme}.geojson"));
@@ -43,7 +49,7 @@ fn main() {
         println!("cargo:rerun-if-changed={}", path.display());
         if !path.is_file() {
             eprintln!(
-                "\nMissing {}.\nThe engine embeds the Natural Earth geography; run `bash scripts/setup-fixture.sh` once to download and verify \
+                "\nMissing {}.\nThe engine embeds the Natural Earth geography and the GeoNames gazetteer; run `bash scripts/setup-fixture.sh` once to download and verify \
                  them (see data/README.md).\n",
                 path.display()
             );
@@ -113,6 +119,12 @@ fn main() {
         } else {
             "village"
         };
+        let iso = p["iso_a2"].as_str().unwrap_or("");
+        let country = if iso.is_empty() || iso == "-99" {
+            ""
+        } else {
+            iso
+        };
         places.push(serde_json::json!({
             "name": name,
             "lat": (lat * SCALE).round() / SCALE,
@@ -120,6 +132,8 @@ fn main() {
             "class": class,
             "rank": p["scalerank"].as_u64().unwrap_or(10),
             "minZoom": p["min_zoom"].as_f64().unwrap_or(10.0),
+            "region": p["adm1name"].as_str().unwrap_or(""),
+            "country": country,
         }));
     }
     fs::write(
@@ -127,6 +141,93 @@ fn main() {
         serde_json::to_vec(&places).expect("serialize places"),
     )
     .expect("write places.json");
+    write_gazetteer(&raw, Path::new(&out));
+}
+
+/// GeoNames `cities5000` clipped to the NEXRAD envelope, for the location
+/// picker only. Map labels stay on Natural Earth (`places.json`).
+fn write_gazetteer(raw: &Path, out: &Path) {
+    let mut admin1 = std::collections::HashMap::new();
+    for line in fs::read_to_string(raw.join("admin1CodesASCII.txt"))
+        .expect("read admin1")
+        .lines()
+    {
+        let mut cols = line.split('\t');
+        let (Some(code), Some(name)) = (cols.next(), cols.next()) else {
+            continue;
+        };
+        if !code.is_empty() && !name.is_empty() {
+            admin1.insert(code.to_owned(), name.to_owned());
+        }
+    }
+    let mut gazetteer = Vec::new();
+    for line in fs::read_to_string(raw.join("cities5000.txt"))
+        .expect("read cities5000")
+        .lines()
+    {
+        let cols: Vec<&str> = line.split('\t').collect();
+        if cols.len() < 15 {
+            continue;
+        }
+        let (name, lat, lon, fclass, fcode, country, adm1, pop) = (
+            cols[1], cols[4], cols[5], cols[6], cols[7], cols[8], cols[10], cols[14],
+        );
+        if fclass != "P" || name.is_empty() {
+            continue;
+        }
+        let (Ok(lat), Ok(lon), Ok(pop)) =
+            (lat.parse::<f64>(), lon.parse::<f64>(), pop.parse::<f64>())
+        else {
+            continue;
+        };
+        if !in_envelope(lon, lat) {
+            continue;
+        }
+        let class = if fcode == "PPLC" {
+            "capital"
+        } else if pop >= 100_000.0 {
+            "city"
+        } else if pop >= 10_000.0 {
+            "town"
+        } else {
+            "village"
+        };
+        let rank = if pop >= 5_000_000.0 {
+            1
+        } else if pop >= 1_000_000.0 {
+            2
+        } else if pop >= 500_000.0 {
+            3
+        } else if pop >= 100_000.0 {
+            4
+        } else if pop >= 50_000.0 {
+            6
+        } else {
+            8
+        };
+        let region = if adm1.is_empty() {
+            String::new()
+        } else {
+            admin1
+                .get(&format!("{country}.{adm1}"))
+                .cloned()
+                .unwrap_or_default()
+        };
+        gazetteer.push(serde_json::json!({
+            "name": name,
+            "lat": (lat * SCALE).round() / SCALE,
+            "lon": (lon * SCALE).round() / SCALE,
+            "class": class,
+            "rank": rank,
+            "region": region,
+            "country": country,
+        }));
+    }
+    fs::write(
+        out.join("gazetteer.json"),
+        serde_json::to_vec(&gazetteer).expect("serialize gazetteer"),
+    )
+    .expect("write gazetteer.json");
 }
 
 /// Every line in a geometry: line strings as they are, polygon rings as

@@ -72,8 +72,9 @@ availability. An archived scan retains its measured coordinates.
 ## Basemap
 
 `build.rs` converts Natural Earth lines to a compact polyline blob and embeds
-populated places. The 1:50m set is global; the 1:10m set is clipped to the
-NEXRAD network envelope. `src/tiles.rs` rasterizes these with `tiny-skia`,
+populated places for map labels. GeoNames cities with population ≥ 5000,
+clipped to the same envelope, are the location-picker gazetteer. The 1:50m
+set is global; the 1:10m set is clipped to the NEXRAD network envelope. `src/tiles.rs` rasterizes these with `tiny-skia`,
 using 1:50m below z5 and 1:10m from z5. Segments outside a tile are skipped.
 
 `src/osm.rs` serves OpenMapTiles vector data from z7 through z14, with Natural

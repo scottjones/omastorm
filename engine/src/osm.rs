@@ -645,6 +645,8 @@ fn place(feature: &Feature, scale: f64, key: TileKey) -> Option<Label> {
         lon: (lon * 1e5).round() / 1e5,
         class: class.to_owned(),
         rank,
+        region: String::new(),
+        country: String::new(),
     })
 }
 

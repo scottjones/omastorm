@@ -17,6 +17,7 @@ pub enum Message<'a> {
     State(&'a State),
     Error(&'a Rejection<'a>),
     TileReady(&'a TileReady<'a>),
+    Places(&'a Places<'a>),
 }
 
 /// One tile answering a client's `tiles_needed`, sent to that client alone
@@ -38,13 +39,29 @@ pub struct TileReady<'a> {
 
 /// A place label carried by `tile_ready`; `class` and `rank` follow the
 /// OpenMapTiles `place` vocabulary (lower rank is more important).
-#[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
+/// `region` and `country` come from Natural Earth (`adm1name`, `iso_a2`)
+/// so the location picker can tell two Jacksonvilles apart; empty on OSM
+/// labels and omitted on the wire when empty.
+#[derive(Serialize, Deserialize, PartialEq, Clone, Debug, Default)]
 pub struct Label {
     pub name: String,
     pub lat: f64,
     pub lon: f64,
     pub class: String,
     pub rank: u32,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub region: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub country: String,
+}
+
+/// Places answering one client's `search_places`. A reply, not shared state:
+/// only the sender hears it, and `state` does not change.
+#[derive(Serialize)]
+pub struct Places<'a> {
+    pub v: u32,
+    pub query: &'a str,
+    pub results: &'a [Label],
 }
 
 /// The engine's answer to one client's command it could not carry out. Sent
@@ -341,6 +358,15 @@ pub enum Command {
     ViewCenter {
         lat: f64,
         lon: f64,
+    },
+    /// Rank gazetteer places for the location picker. Answered with
+    /// `places` to the sender; optional `lat`/`lon` order nearer matches first.
+    SearchPlaces {
+        query: String,
+        #[serde(default)]
+        lat: Option<f64>,
+        #[serde(default)]
+        lon: Option<f64>,
     },
     /// Anything newer than this build.
     #[serde(other)]

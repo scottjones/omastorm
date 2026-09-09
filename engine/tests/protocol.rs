@@ -213,6 +213,35 @@ fn fixture_transport_and_shared_commands() {
     assert_eq!(e["type"], "error");
     assert_eq!(e["command"], "view_center");
     assert!(e["message"].as_str().unwrap().contains("lat"));
+    // Place search is a reply to its sender: gazetteer places, not a
+    // state change, and a bad origin is rejected without a broadcast.
+    send(
+        &mut first,
+        json!({"type":"search_places","query":"oklahoma","lat":35.47,"lon":-97.52}),
+    );
+    let places = read(&mut first);
+    assert_eq!(places["type"], "places");
+    assert_eq!(places["v"], 1);
+    assert_eq!(places["query"], "oklahoma");
+    let results = places["results"].as_array().unwrap();
+    assert_eq!(results[0]["name"], "Oklahoma City");
+    assert_eq!(results[0]["region"], "Oklahoma");
+    assert_eq!(results[0]["country"], "US");
+    assert!(results.len() <= 8);
+    send(
+        &mut second,
+        json!({"type":"search_places","query":"norman"}),
+    );
+    let places = read(&mut second);
+    assert_eq!(places["results"][0]["name"], "Norman");
+    send(
+        &mut first,
+        json!({"type":"search_places","query":"x","lat":95.0,"lon":0.0}),
+    );
+    let e = read(&mut first);
+    assert_eq!(e["type"], "error");
+    assert_eq!(e["command"], "search_places");
+    assert!(e["message"].as_str().unwrap().contains("lat"));
     // Still locked from above, a settle far from the station hands off to
     // nothing (the nearest there would go live and reach the network); the
     // other client's next state is the release.
