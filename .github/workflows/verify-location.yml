@@ -1,0 +1,55 @@
+name: Verify location PR
+on:
+  push:
+    branches: [verify-ip-location]
+permissions:
+  contents: read
+jobs:
+  native:
+    name: Location ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    env:
+      XDG_CACHE_HOME: ${{ github.workspace }}/target/ci-cache
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 2f80244375af18ebc63917ea248aaae0bce7d8dd
+          persist-credentials: false
+      - name: Prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config binutils socat unzip
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db
+      - name: Verify source and inputs
+        run: |
+          test "$(git rev-parse HEAD)" = 2f80244375af18ebc63917ea248aaae0bce7d8dd
+          bash scripts/setup-fixture.sh
+          bash scripts/cargo.sh fetch --locked
+      - name: Lint and native engine tests
+        run: |
+          mise lint
+          mise test
+          bash -x scripts/check-engine-install.sh --published-install-only > target/install-check.log 2>&1 || { cat target/install-check.log; exit 1; }
+      - name: Native optimized build
+        run: |
+          bash scripts/cargo.sh build --release --offline --locked
+          readelf -h target/release/omastorm-engine
+          binary=$PWD/target/release/omastorm-engine
+          scratch=$(mktemp -d /tmp/omastorm-native.XXXXXX)
+          export XDG_RUNTIME_DIR=$scratch/runtime XDG_CACHE_HOME=$scratch/cache XDG_DATA_HOME=$scratch/data
+          mkdir -p "$XDG_RUNTIME_DIR"
+          trap '"$binary" stop >/dev/null 2>&1 || true; rm -rf "$scratch"' EXIT
+          "$binary" ensure
+          hello=$(timeout 2 socat -t0.2 - "UNIX-CONNECT:$XDG_RUNTIME_DIR/omastorm/engine.sock" < /dev/null | head -n1 || true)
+          version=$(awk -F'"' '/^version = /{print $2; exit}' engine/Cargo.toml)
+          protocol=$(rg -o 'message\.v !== ([0-9]+)' -r '$1' ui/Engine.qml)
+          jq -e --arg version "$version" --argjson protocol "$protocol" '.type == "hello" and .engine == $version and .v == $protocol' <<< "$hello"
