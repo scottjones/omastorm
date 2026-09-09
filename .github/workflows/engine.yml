@@ -1,0 +1,116 @@
+name: Engine builds
+
+on:
+  pull_request:
+  push:
+    branches: ['**']
+    tags: ['engine-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: engine-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Native ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    env:
+      XDG_CACHE_HOME: ${{ github.workspace }}/target/ci-cache
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Native build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config binutils socat unzip
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+      - name: Verify engine tag
+        run: |
+          version=$(awk -F'"' '/^version = /{print $2; exit}' engine/Cargo.toml)
+          if [[ "$GITHUB_REF" == refs/tags/engine-* ]]; then
+            test "$GITHUB_REF_NAME" = "engine-$version"
+          fi
+      - name: Fetch verified fixtures and locked dependencies
+        run: |
+          bash scripts/setup-fixture.sh
+          bash scripts/cargo.sh fetch --locked
+      - name: Check engine and installer
+        run: |
+          mise lint
+          mise test
+          bash scripts/check-engine-install.sh
+          bash scripts/check-engine-release.sh
+      - name: Build native release binary
+        run: |
+          mise build-release
+          bash scripts/check-engine-binary.sh target/dist/omastorm-engine-${{ matrix.arch }}-unknown-linux-gnu
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: engine-native-${{ matrix.arch }}
+          path: target/dist/omastorm-engine-${{ matrix.arch }}-unknown-linux-gnu*
+          if-no-files-found: error
+
+  bundle:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: engine-native-*
+          merge-multiple: true
+          path: target/dist
+      - name: Bundle both architectures and their exact checksums
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binutils jq
+          bash scripts/package-engine-release.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: engine-release
+          path: |
+            target/dist/omastorm-engine-*
+            target/dist/SHA256SUMS
+            target/dist/release.pin
+          if-no-files-found: error
+
+  draft-release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/engine-')
+    needs: bundle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: engine-release
+          path: release
+      - name: Draft the engine release without replacing existing assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cd release
+          sha256sum --check SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" --verify-tag --draft \
+            --title "$GITHUB_REF_NAME" \
+            --notes 'Native x86_64 and ARM64 Linux engines. Publish this release before verifying and committing release.pin in the plugin.' \
+            omastorm-engine-* SHA256SUMS release.pin

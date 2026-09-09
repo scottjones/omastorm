@@ -52,13 +52,19 @@ The implementation is [scripts/release-engine.sh](../scripts/release-engine.sh).
 1. Bump `version` in `engine/Cargo.toml`. Run
    `mise exec -- cargo build --offline` to update `Cargo.lock`, then
    `mise check`. Commit both files and push to `main`.
+   The engine workflow builds both Linux architectures natively. Download its
+   `engine-release` artifact into `target/dist/` before running the release
+   command locally, or gather both native outputs and their `.build.json`
+   metadata from this same commit. A missing, stale, or mislabeled build fails
+   packaging before a draft is created.
 2. Run `mise release --dry-run` from clean `main`, even with `origin/main`.
-   It builds the stripped candidate, checks its reported version and UI
-   protocol compatibility, and prints the tag, sha256, and release notes.
+   It builds the native stripped candidate, verifies both binaries' source
+   commit/version/checksums, checks the native candidate's reported version
+   and UI protocol compatibility, and prints the tag, sha256, and release notes.
    Review these before publishing.
 3. Run `mise release` and confirm publication. It creates `engine-<version>`
-   with the binary and `SHA256SUMS`, downloads the published asset, and verifies
-   it against the candidate before writing `engine/release.pin`.
+   with both binaries, build metadata, `SHA256SUMS`, and the candidate pin,
+   then verifies every published binary before writing `engine/release.pin`.
 4. Run `mise check` to verify installation from the new pin, then commit the
    pin separately and push. Users receive it on their next plugin update.
 
@@ -66,6 +72,22 @@ The implementation is [scripts/release-engine.sh](../scripts/release-engine.sh).
 its `--write-pin` option to bypass published-asset verification.
 If release validation fails, resolve the reported precondition. If an already
 published asset is wrong, leave the pin unchanged and release a new version.
+
+### CI release route
+
+`.github/workflows/engine.yml` runs the mise toolchain's lint, Rust tests,
+installer checks, and release checks on native `ubuntu-24.04` x86_64 and
+`ubuntu-24.04-arm` aarch64 runners. Every native candidate must answer hello
+with the engine version and UI protocol. GPU/QML checks still require an
+Omarchy desktop. PRs, branch pushes, and manual runs produce workflow artifacts.
+
+Alternatively, push `engine-<version>` on the tested release commit. The tag
+must match Cargo.toml. CI combines both candidates and creates a draft GitHub
+Release; it refuses to overwrite an existing release. Review and publish the
+draft, download its `engine-release` workflow artifact into `target/dist/`,
+then run `bash scripts/pin-engine-release.sh target/dist/release.pin`. That
+verifies the exact public bytes without rebuilding them. Run `mise check`
+and commit the pin afterward. Never pin a draft or add assets after publishing.
 
 ## Plugin
 

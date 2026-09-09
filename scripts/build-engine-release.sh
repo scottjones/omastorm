@@ -43,6 +43,9 @@ printf '%s  %s\n' "$sum" "$dest"
 pin=engine/release.pin
 read_engine_pin "$pin"
 version=$(awk -F'"' '/^version = /{print $2; exit}' engine/Cargo.toml)
+jq -n --arg source "$(git rev-parse HEAD)" --arg version "$version" \
+  --arg asset "$asset" --arg sha256 "$sum" \
+  '{source:$source, version:$version, asset:$asset, sha256:$sha256}' > "$dest.build.json"
 if [[ $tag != "engine-$version" ]]; then
   # Hashes from the previous release must not follow a version bump.
   assets=() hashes=()
@@ -70,19 +73,7 @@ candidate=target/dist/release.pin
 } > target/dist/SHA256SUMS
 
 if (( write_pin )); then
-  work=$(mktemp -d "${TMPDIR:-/tmp}/omastorm-release.XXXXXX")
-  trap 'rm -rf "$work"' EXIT
-  # Verify every candidate entry against GitHub, including the retained one.
-  for arch in x86_64 aarch64; do
-    [[ -n ${assets[$arch]:-} ]] || continue
-    url=https://github.com/$repo/releases/download/$tag/${assets[$arch]}
-    curl -fsSL --retry 2 -o "$work/asset" -- "$url" \
-      || die "Publish ${assets[$arch]} on $tag before updating $pin."
-    got=$(sha256sum -- "$work/asset" | awk '{print $1}')
-    [[ $got == "${hashes[$arch]}" ]] || die "Published ${assets[$arch]} does not match the candidate checksum; $pin was not changed."
-  done
-  cp -- "$candidate" "$pin"
-  printf 'Verified published assets and updated %s\n' "$pin"
+  bash scripts/pin-engine-release.sh "$candidate"
 else
   printf 'Candidate pin: %s (committed pin unchanged).\n' "$candidate"
   printf 'Publish %s on %s, then run this script with --write-pin.\n' "$asset" "$tag"
