@@ -13,7 +13,7 @@ curl -fL --retry 2 'https://unidata-nexrad-level2.s3.amazonaws.com/2013/05/20/KT
 ne='https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson'
 curl -fL --retry 2 "$ne/ne_10m_populated_places_simple.geojson" -o data/raw/places.geojson
 curl -fL --retry 2 'https://download.geonames.org/export/dump/cities5000.zip' -o data/raw/cities5000.zip
-python3 -c "import zipfile; zipfile.ZipFile('data/raw/cities5000.zip').extract('cities5000.txt', 'data/raw')"
+unzip -p data/raw/cities5000.zip cities5000.txt > data/raw/cities5000.txt
 rm -f data/raw/cities5000.zip
 curl -fL --retry 2 'https://download.geonames.org/export/dump/admin1CodesASCII.txt' -o data/raw/admin1CodesASCII.txt
 for scale in 10m 50m; do

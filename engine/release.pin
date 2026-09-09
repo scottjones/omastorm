@@ -2,5 +2,5 @@
 # Bump only after the named release exists on wesleygrimes/omastorm.
 tag=engine-0.1.2
 repo=wesleygrimes/omastorm
-asset=omastorm-engine-x86_64-unknown-linux-gnu
-sha256=e2c415e003002c7e0641d9f5effc7ba3d255ba7436aa6b2179e8f670ae650584
+asset_x86_64=omastorm-engine-x86_64-unknown-linux-gnu
+sha256_x86_64=e2c415e003002c7e0641d9f5effc7ba3d255ba7436aa6b2179e8f670ae650584

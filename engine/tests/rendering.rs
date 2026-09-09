@@ -298,10 +298,12 @@ fn sample(x: u32, y: u32, view: &View, geometry: &Geometry) -> (f32, f32) {
 #[derive(Clone, Copy, PartialEq, Debug)]
 struct Expect {
     alpha: u8,
+    coverage: f32,
     color: Option<[u8; 3]>,
 }
 const BLANK: Expect = Expect {
     alpha: 0,
+    coverage: 0.0,
     color: None,
 };
 /// The shader's rule for the gate at `cell`, for pixel (x, y) in `treatment`.
@@ -321,6 +323,7 @@ fn expect(cell: Option<[u8; 3]>, x: u32, y: u32, treatment: &str, geometry: &Geo
             let tone = if cross { 245 } else { 24 };
             return Expect {
                 alpha: 255,
+                coverage: 1.0,
                 color: Some([tone; 3]),
             };
         }
@@ -347,15 +350,16 @@ fn expect(cell: Option<[u8; 3]>, x: u32, y: u32, treatment: &str, geometry: &Geo
         }
         other => panic!("unknown treatment {other}"),
     };
-    let alpha = (alpha * 255.0).round() as u8;
     Expect {
-        alpha,
-        color: (alpha > 0).then_some(geometry.palette[b]),
+        alpha: (alpha * 255.0).round() as u8,
+        coverage: alpha,
+        color: (alpha > 0.0).then_some(geometry.palette[b]),
     }
 }
 /// Alpha within 1/255 everywhere; opaque pixels carry the swatch exactly, and
-/// partially covered stipple pixels carry it within the rounding of Qt's
-/// premultiplied storage, which grows as alpha shrinks.
+/// partially covered stipple pixels match in premultiplied space. Both alpha
+/// and color were quantized independently by the GPU before Qt unpremultiplied
+/// the PNG; using rounded alpha to predict color loses that distinction.
 fn matches(actual: [u8; 4], expected: Expect) -> bool {
     if (i32::from(actual[3]) - i32::from(expected.alpha)).abs() > 1 {
         return false;
@@ -363,14 +367,30 @@ fn matches(actual: [u8; 4], expected: Expect) -> bool {
     match expected.color {
         None => true,
         Some(color) => {
-            let tolerance = if expected.alpha == 255 {
-                0
-            } else {
-                128 / i32::from(expected.alpha.max(1)) + 1
-            };
-            (0..3).all(|i| (i32::from(actual[i]) - i32::from(color[i])).abs() <= tolerance)
+            if expected.alpha == 255 {
+                return actual[..3] == color;
+            }
+            let alpha = f32::from(actual[3]) / 255.0;
+            // Half a stored color byte, then half a straight PNG byte
+            // mapped back to premultiplied space; epsilon for f32 arithmetic.
+            let tolerance = 0.5 + 0.5 * alpha + 0.001;
+            (0..3).all(|i| {
+                (f32::from(actual[i]) * alpha - f32::from(color[i]) * expected.coverage).abs()
+                    <= tolerance
+            })
         }
     }
+}
+
+#[test]
+fn stipple_quantization_keeps_independent_color_and_alpha_rounding() {
+    let expected = Expect {
+        alpha: 143,
+        coverage: 0.5625,
+        color: Some([216, 76, 100]),
+    };
+    assert!(matches([218, 77, 100, 143], expected));
+    assert!(!matches([220, 77, 100, 143], expected));
 }
 
 #[derive(serde::Serialize, Default, Debug)]

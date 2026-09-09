@@ -31,7 +31,9 @@ The location picker searches [GeoNames](https://www.geonames.org/)
 `cities5000` (populated places with population ≥ 5000) clipped to that
 same envelope, with admin-1 names from `admin1CodesASCII.txt`.
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Map labels do
-not use this table.
+not use this table. The city-list checksum covers the official 2026-09-09
+snapshot (69,700 records). The upstream URL is updated daily; a changed
+download must be reviewed and repinned, never accepted without verification.
 
 ## Fetching
 

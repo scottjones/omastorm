@@ -27,7 +27,7 @@ rules. [docs/protocol.md](docs/protocol.md) defines the engine/client contract;
 [engine/README.md](engine/README.md) maps the backend.
 
 Use an Omarchy desktop with Quickshell and OpenGL, `qt6-shadertools`, and
-`socat`. Install [mise](https://mise.jdx.dev), then from a checkout:
+`socat`, and `unzip` for fixture setup. Install [mise](https://mise.jdx.dev), then from a checkout:
 
 ```sh
 mise install

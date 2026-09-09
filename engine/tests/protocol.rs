@@ -42,7 +42,9 @@ fn scratch_root(name: &str) -> PathBuf {
     ));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
-    root
+    // Remove engine/.. before adding the socket suffix: Unix socket paths
+    // have a small byte limit, especially in nested PR worktrees.
+    fs::canonicalize(root).unwrap()
 }
 /// Connect once the daemon under `root` listens, within `STARTUP`; `alive`
 /// fails early when the daemon has already exited.
@@ -581,4 +583,52 @@ fn a_lean_start_has_no_frame_until_a_site_is_selected() {
     let _ = child.kill();
     let _ = child.wait();
     let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn launcher_retries_a_slow_hello_within_its_startup_budget() {
+    let _serial = serial();
+    let engine = Engine::start();
+    let hello = read(&mut engine.connect());
+    let root = scratch_root("hello");
+    let dir = root.join("omastorm");
+    fs::create_dir_all(&dir).unwrap();
+    let lock = fs::File::create(dir.join("engine.lock")).unwrap();
+    lock.try_lock().unwrap();
+    let listener = UnixListener::bind(dir.join("engine.sock")).unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let server = thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        for attempt in 0..2 {
+            let mut stream = loop {
+                match listener.accept() {
+                    Ok((stream, _)) => break stream,
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(Instant::now() < deadline, "launcher did not retry hello");
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(e) => panic!("{e}"),
+                }
+            };
+            if attempt == 0 {
+                thread::sleep(Duration::from_millis(350));
+                let _ = writeln!(stream, "{hello}"); // The first probe has timed out.
+            } else {
+                writeln!(stream, "{hello}").unwrap();
+            }
+        }
+    });
+    let started = Command::new(env!("CARGO_BIN_EXE_omastorm-engine"))
+        .arg("ensure")
+        .env("XDG_RUNTIME_DIR", &root)
+        .output()
+        .unwrap();
+    server.join().unwrap();
+    assert!(
+        started.status.success(),
+        "{}",
+        String::from_utf8_lossy(&started.stderr)
+    );
+    drop(lock);
+    fs::remove_dir_all(root).unwrap();
 }
