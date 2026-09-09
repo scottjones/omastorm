@@ -1,49 +1,89 @@
 #!/usr/bin/env bash
-# Build the x86_64-unknown-linux-gnu GitHub Release asset and SHA256SUMS
-# under target/dist/ as a release candidate. It is not compared to the current
-# pin; a candidate is expected to differ from the published binary. Pass
-# --write-pin to copy its hash into engine/release.pin
-# after a successful build. Does not publish, tag, or push.
+# Build a native Linux release asset and a candidate multi-architecture pin
+# under target/dist/. --write-pin verifies the published asset before pinning.
+# Does not publish, tag, or push.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 die() { printf '%s\n' "$@" >&2; exit 1; }
+source scripts/engine-pin.sh
 
 write_pin=0
-[[ ${1:-} == --write-pin ]] && write_pin=1
+case ${1:-} in
+  '') ;;
+  --write-pin) write_pin=1 ;;
+  *) die "Usage: bash scripts/build-engine-release.sh [--write-pin]" ;;
+esac
+[[ $# -le 1 ]] || die "Usage: bash scripts/build-engine-release.sh [--write-pin]"
 
 if ! command -v rustc >/dev/null && [[ -x .tools/cargo/bin/rustc ]]; then
   export RUSTUP_HOME="$PWD/.tools/rustup" CARGO_HOME="$PWD/.tools/cargo"
   export PATH="$CARGO_HOME/bin:$PATH"
 fi
 host=$(rustc -vV | awk '/^host:/{print $2}')
-[[ $host == x86_64-unknown-linux-gnu ]] || die "This script builds the x86_64-unknown-linux-gnu asset (host is $host)."
-
-bash scripts/cargo.sh build --release --locked --offline
-src=target/release/omastorm-engine
+case $host in
+  x86_64-unknown-linux-gnu|aarch64-unknown-linux-gnu) ;;
+  *) die "Build on x86_64-unknown-linux-gnu or aarch64-unknown-linux-gnu (host is $host)." ;;
+esac
+machine=${host%%-*}
+# Explicit target avoids a Cargo config/env target silently changing the asset.
+bash scripts/cargo.sh build --release --target "$host" --locked --offline
+src=target/$host/release/omastorm-engine
 [[ -x $src ]] || die "cargo did not produce $src"
 
 mkdir -p target/dist
-asset=omastorm-engine-x86_64-unknown-linux-gnu
+asset=omastorm-engine-$host
 dest=target/dist/$asset
 cp -- "$src" "$dest"
 strip --strip-unneeded -- "$dest"
 chmod 755 -- "$dest"
-
 sum=$(sha256sum -- "$dest" | awk '{print $1}')
-# sha256sum -c format, names as they appear on the Release.
-(cd target/dist && sha256sum -- "$asset" > SHA256SUMS)
 printf '%s  %s\n' "$sum" "$dest"
 
-version=$(awk -F'"' '/^version = /{print $2; exit}' engine/Cargo.toml)
 pin=engine/release.pin
+read_engine_pin "$pin"
+version=$(awk -F'"' '/^version = /{print $2; exit}' engine/Cargo.toml)
+if [[ $tag != "engine-$version" ]]; then
+  # Hashes from the previous release must not follow a version bump.
+  assets=() hashes=()
+  tag=engine-$version
+fi
+assets[$machine]=$asset
+hashes[$machine]=$sum
+candidate=target/dist/release.pin
+{
+  printf '# Pinned GitHub Release for the engine binary (DESIGN.md, distribution).\n'
+  printf '# Bump only after the named assets exist on %s.\n' "$repo"
+  printf 'tag=%s\nrepo=%s\n' "$tag" "$repo"
+  for arch in x86_64 aarch64; do
+    [[ -n ${assets[$arch]:-} ]] || continue
+    printf 'asset_%s=%s\nsha256_%s=%s\n' "$arch" "${assets[$arch]}" "$arch" "${hashes[$arch]}"
+  done
+} > "$candidate"
+# Preserve the other architecture's published checksum even on a native build
+# machine that has only one binary. All entries belong to the candidate tag.
+{
+  for arch in x86_64 aarch64; do
+    [[ -n ${assets[$arch]:-} ]] || continue
+    printf '%s  %s\n' "${hashes[$arch]}" "${assets[$arch]}"
+  done
+} > target/dist/SHA256SUMS
+
 if (( write_pin )); then
-  cat > "$pin" <<PIN
-# Pinned GitHub Release for the engine binary (DESIGN.md, distribution).
-# Bump only after the named release exists on wesleygrimes/omastorm.
-tag=engine-$version
-repo=wesleygrimes/omastorm
-asset=$asset
-sha256=$sum
-PIN
+  work=$(mktemp -d "${TMPDIR:-/tmp}/omastorm-release.XXXXXX")
+  trap 'rm -rf "$work"' EXIT
+  # Verify every candidate entry against GitHub, including the retained one.
+  for arch in x86_64 aarch64; do
+    [[ -n ${assets[$arch]:-} ]] || continue
+    url=https://github.com/$repo/releases/download/$tag/${assets[$arch]}
+    curl -fsSL --retry 2 -o "$work/asset" -- "$url" \
+      || die "Publish ${assets[$arch]} on $tag before updating $pin."
+    got=$(sha256sum -- "$work/asset" | awk '{print $1}')
+    [[ $got == "${hashes[$arch]}" ]] || die "Published ${assets[$arch]} does not match the candidate checksum; $pin was not changed."
+  done
+  cp -- "$candidate" "$pin"
+  printf 'Verified published assets and updated %s\n' "$pin"
+else
+  printf 'Candidate pin: %s (committed pin unchanged).\n' "$candidate"
+  printf 'Publish %s on %s, then run this script with --write-pin.\n' "$asset" "$tag"
 fi

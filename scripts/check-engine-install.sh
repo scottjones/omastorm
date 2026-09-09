@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Installer and pin (DESIGN.md, distribution): hash verify, refuse a
 # mismatch, install under a scratch XDG_DATA_HOME, skip a current dest,
-# reject an unsupported machine, keep ordinary launch and a checkout
+# select architecture-specific assets, reject an unsupported machine, keep a checkout
 # --ensure off the installer. Uses a scratch pin and the debug engine so
 # check.sh does not need a release rebuild. The committed pin is then installed
 # for real and its asset must hash to the pin, speak the protocol the UI
@@ -10,6 +10,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 fail() { printf '%s\n' "$@" >&2; exit 1; }
+die() { fail "$@"; }
+source scripts/engine-pin.sh
 [[ -x target/debug/omastorm-engine ]] || fail 'Need target/debug/omastorm-engine (check.sh builds it).'
 
 # Several copies of the debug engine and a tree of HEAD: under target/, and
@@ -22,12 +24,21 @@ export XDG_DATA_HOME="$scratch/data" XDG_CACHE_HOME="$scratch/cache" XDG_RUNTIME
 mkdir -p "$XDG_RUNTIME_DIR"
 debug=$PWD/target/debug/omastorm-engine
 sum=$(sha256sum -- "$debug" | awk '{print $1}')
+native=$(engine_machine "$(uname -m)")
+export OMASTORM_ENGINE_MACHINE=$native
+other=x86_64
+[[ $native == x86_64 ]] && other=aarch64
+# Distinct bytes catch a selector that uses the host's checksum for both CPUs.
+printf 'other architecture fixture\n' > "$scratch/other"
+other_sum=$(sha256sum -- "$scratch/other" | awk '{print $1}')
 pin=$scratch/release.pin
 cat > "$pin" <<PIN
 tag=engine-test
 repo=wesleygrimes/omastorm
-asset=omastorm-engine-x86_64-unknown-linux-gnu
-sha256=$sum
+asset_$native=omastorm-engine-$native-unknown-linux-gnu
+sha256_$native=$sum
+asset_$other=omastorm-engine-$other-unknown-linux-gnu
+sha256_$other=$other_sum
 PIN
 export OMASTORM_ENGINE_PIN=$pin
 dest=$XDG_DATA_HOME/omastorm/bin/omastorm-engine
@@ -63,11 +74,68 @@ chmod 755 -- "$dest"
 OMASTORM_ENGINE_ASSET="$debug" bash scripts/install-engine.sh
 [[ $(sha256sum -- "$dest" | awk '{print $1}') == "$sum" ]] || fail 'Stale dest was not replaced'
 
-# aarch64 is named, not fetched.
-if OMASTORM_ENGINE_MACHINE=aarch64 bash scripts/install-engine.sh 2>"$scratch/arch.err"; then
-  fail 'Installer accepted aarch64'
+# Both architectures select their own asset and checksum, including arm64 alias.
+for machine in x86_64 aarch64 arm64; do
+  arch=$(engine_machine "$machine")
+  fixture=$debug expected=$sum
+  if [[ $arch != "$native" ]]; then fixture=$scratch/other; expected=$other_sum; fi
+  OMASTORM_ENGINE_MACHINE=$machine OMASTORM_ENGINE_ASSET=$fixture "${install_cmd[@]}"
+  [[ $(sha256sum -- "$dest" | awk '{print $1}') == "$expected" ]] || fail "Wrong asset for $machine"
+done
+# A host binary cannot pass verification for the other architecture.
+rm -f "$dest"
+if OMASTORM_ENGINE_MACHINE=$other OMASTORM_ENGINE_ASSET=$debug "${install_cmd[@]}" 2>"$scratch/arch.err"; then
+  fail 'Installer accepted the other architecture checksum'
 fi
-rg -q 'aarch64 is deferred' "$scratch/arch.err" || fail "Arch error was unclear: $(cat "$scratch/arch.err")"
+rg -q 'sha256 mismatch' "$scratch/arch.err" || fail 'Wrong architecture did not fail checksum verification'
+[[ ! -e $dest ]] || fail 'Wrong architecture wrote a dest'
+
+# The normal download path must construct the architecture-specific release URL.
+mkdir -p "$scratch/bin" "$scratch/downloads"
+cp "$debug" "$scratch/downloads/omastorm-engine-$native-unknown-linux-gnu"
+cp "$scratch/other" "$scratch/downloads/omastorm-engine-$other-unknown-linux-gnu"
+cat > "$scratch/bin/curl" <<'CURL'
+#!/usr/bin/env bash
+set -euo pipefail
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -o) out=$2; shift 2 ;;
+    --) url=$2; break ;;
+    *) shift ;;
+  esac
+done
+printf '%s\n' "$url" > "$DOWNLOAD_FIXTURES/url"
+cp "$DOWNLOAD_FIXTURES/${url##*/}" "$out"
+CURL
+chmod +x "$scratch/bin/curl"
+for arch in x86_64 aarch64; do
+  rm -f "$dest"
+  PATH="$scratch/bin:$PATH" DOWNLOAD_FIXTURES=$scratch/downloads OMASTORM_ENGINE_MACHINE=$arch "${install_cmd[@]}"
+  [[ $(cat "$scratch/downloads/url") == "https://github.com/wesleygrimes/omastorm/releases/download/engine-test/omastorm-engine-$arch-unknown-linux-gnu" ]] \
+    || fail "Wrong download URL for $arch"
+done
+rm -f "$dest"
+
+# An unsupported CPU and a supported CPU without a published pin never fetch.
+if OMASTORM_ENGINE_MACHINE=armv7l "${install_cmd[@]}" 2>"$scratch/arch.err"; then
+  fail 'Installer accepted armv7l'
+fi
+rg -q 'Unsupported engine architecture: armv7l' "$scratch/arch.err" || fail "Arch error was unclear: $(cat "$scratch/arch.err")"
+sed "/^asset_$other=/d; /^sha256_$other=/d" "$pin" > "$scratch/missing.pin"
+if OMASTORM_ENGINE_MACHINE=$other OMASTORM_ENGINE_PIN=$scratch/missing.pin "${install_cmd[@]}" 2>"$scratch/arch.err"; then
+  fail 'Installer accepted an unpinned architecture'
+fi
+rg -q "No pinned $other engine" "$scratch/arch.err" || fail 'Missing architecture error was unclear'
+
+# An incomplete or duplicated pin is refused before touching the destination.
+sed "/^sha256_$native=/d" "$pin" > "$scratch/incomplete.pin"
+cp "$pin" "$scratch/duplicate.pin"
+printf 'sha256_%s=%s\n' "$native" "$sum" >> "$scratch/duplicate.pin"
+for bad in incomplete duplicate; do
+  if OMASTORM_ENGINE_PIN=$scratch/$bad.pin "${install_cmd[@]}" 2>"$scratch/pin.err"; then
+    fail "Installer accepted $bad pin"
+  fi
+done
 
 # Checkout --ensure uses the debug engine and does not write the data home.
 rm -rf "$XDG_DATA_HOME"
@@ -86,6 +154,7 @@ git archive HEAD | tar -x -C "$clone"
 mkdir -p "$clone/scripts" "$clone/engine"
 cp -- run.sh "$clone/run.sh"
 cp -- scripts/install-engine.sh "$clone/scripts/install-engine.sh"
+cp -- scripts/engine-pin.sh "$clone/scripts/engine-pin.sh"
 install -D -m 644 "$pin" "$clone/engine/release.pin"
 rm -rf "$clone/target"
 export OMASTORM_ENGINE_ASSET=$debug OMASTORM_ENGINE_PIN=$clone/engine/release.pin
@@ -101,8 +170,12 @@ timeout 2 socat -t0.2 - "UNIX-CONNECT:$XDG_RUNTIME_DIR/omastorm/engine.sock" < /
 # The asset is fetched once into target/pinned/<sha256> and reused. When
 # GitHub is unreachable the step says so and passes; a checkout is correct
 # without the network, and the fetch is retried on the next run.
-committed=$(awk -F= '/^sha256=/{print $2}' engine/release.pin)
-tag=$(awk -F= '/^tag=/{print $2}' engine/release.pin)
+read_engine_pin engine/release.pin
+committed=${hashes[$native]:-}
+if [[ -z $committed ]]; then
+  echo "Engine install fixtures PASS; no published $native pin yet, native release check pending."
+  exit 0
+fi
 [[ $committed =~ ^[a-f0-9]{64}$ ]] || fail 'Committed pin sha256 is not 64 lowercase hex digits'
 [[ $tag =~ ^engine-([0-9]+\.[0-9]+\.[0-9]+)$ ]] || fail "Committed pin tag is not engine-<version>: $tag"
 pinned_version=${BASH_REMATCH[1]}

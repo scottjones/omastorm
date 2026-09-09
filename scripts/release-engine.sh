@@ -26,7 +26,9 @@ for arg in "$@"; do
 done
 
 repo=wesleygrimes/omastorm
-asset=omastorm-engine-x86_64-unknown-linux-gnu
+source scripts/engine-pin.sh
+machine=$(engine_machine "$(uname -m)")
+asset=omastorm-engine-$machine-unknown-linux-gnu
 
 for tool in gh git curl jq rg socat sha256sum strip; do
   command -v "$tool" > /dev/null 2>&1 || die "Need $tool on PATH; run this as mise release."
@@ -106,8 +108,8 @@ cat > engine/release.pin <<PIN
 # Bump only after the named release exists on wesleygrimes/omastorm.
 tag=$tag
 repo=$repo
-asset=$asset
-sha256=$sum
+asset_$machine=$asset
+sha256_$machine=$sum
 PIN
 echo "Wrote engine/release.pin for $tag."
 echo "Next: mise check, then commit the pin bump and push."

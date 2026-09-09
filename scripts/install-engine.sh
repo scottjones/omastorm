@@ -7,24 +7,14 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 die() { printf '%s\n' "$@" >&2; exit 1; }
+source scripts/engine-pin.sh
 
+machine=$(engine_machine "${OMASTORM_ENGINE_MACHINE:-$(uname -m)}")
 pin_file=${OMASTORM_ENGINE_PIN:-engine/release.pin}
-[[ -f $pin_file ]] || die "Omastorm engine pin missing: $pin_file"
-tag='' repo='' asset='' sha256=''
-while IFS= read -r line || [[ -n $line ]]; do
-  [[ $line =~ ^[[:space:]]*(#|$) ]] && continue
-  key=${line%%=*}
-  val=${line#*=}
-  case $key in
-    tag|repo|asset|sha256) printf -v "$key" '%s' "$val" ;;
-    *) die "Unknown key in $pin_file: $key" ;;
-  esac
-done < "$pin_file"
-[[ -n $tag && -n $repo && -n $asset && -n $sha256 ]] || die "Incomplete pin in $pin_file"
-[[ $sha256 =~ ^[a-f0-9]{64}$ ]] || die "Pin sha256 in $pin_file is not 64 lowercase hex digits"
-
-machine=${OMASTORM_ENGINE_MACHINE:-$(uname -m)}
-[[ $machine == x86_64 ]] || die "No $machine engine asset yet (aarch64 is deferred; see DESIGN.md, distribution)."
+read_engine_pin "$pin_file"
+asset=${assets[$machine]:-}
+sha256=${hashes[$machine]:-}
+[[ -n $asset && -n $sha256 ]] || die "No pinned $machine engine for $tag yet. Publish its release asset and add its checksum to $pin_file."
 
 data_home=${XDG_DATA_HOME:-$HOME/.local/share}
 dest_dir=$data_home/omastorm/bin

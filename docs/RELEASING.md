@@ -9,6 +9,14 @@ Published releases are immutable. Prepare assets in a draft; a mistake after
 publication requires a new version. Never pin an unpublished or unverified
 binary.
 
+The pin contains a shared `tag` and `repo`, and an `asset_<architecture>` /
+`sha256_<architecture>` pair for each published Linux architecture
+(`x86_64`, `aarch64`). Missing architectures fail before download. Native
+builds write the GNU target's binary, checksums, and a candidate pin under
+`target/dist/`; the tracked pin changes only after public assets are verified.
+The current x86 release is retained until a new release includes ARM64.
+Never add the ARM asset to an already published, immutable release.
+
 ## Release paths
 
 Users run `main`: a merged change reaches them on their next plugin update. A
