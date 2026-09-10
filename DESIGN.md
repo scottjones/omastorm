@@ -23,6 +23,47 @@ below-threshold stay distinct from measured values. Whatever a change hides
 is named in the legend. Keep OSM (ODbL) and Natural Earth attribution with
 the data and on screen.
 
+## Window chrome
+
+Use these names when discussing or changing the expanded window. They are
+the ids and comments in `ui/RadarWindow.qml`.
+
+| Name | What it is |
+|---|---|
+| **brand row** | Mark, OMASTORM, status light, LIVE / ARCHIVED |
+| **site row** | Station title, radar lock (yellow when the camera is outside that radar's rings) |
+| **product stack** | Right column: product line + meta line |
+| **product line** | Product name / tilt and NOAA NEXRAD |
+| **meta line** | Age, right-aligned under the product line |
+| **map stage** | Radar map frame |
+| **follow chip** | Crosshair on the map (place follow); hidden until GPS is wired |
+| **help chip** | Keys / `?` on the map |
+| **scale bar** | Ground distance under the map, left; locale picks km or mi; label updates with zoom |
+| **legend** | dBZ scale directly under the map |
+| **transport** | Playback buttons |
+| **tick strip** | Frame ticks on the timeline |
+| **strip stamp** | Date / time / zone above the tick strip |
+| **frame index** | `N / total` above the strip, right-aligned; counts available frames only |
+
+**Bottom chrome order.** Map stage, then legend, then transport + tick
+strip, with the strip stamp left-aligned and frame index right-aligned
+on one row above the ticks. Playback buttons align with the track at the bottom.
+
+**Product stack.** Compact product line (name, then NOAA NEXRAD). The meta
+line is the age only, right-aligned under that row.
+
+**Time.** Age on the meta line is how stale the frame on screen is. The
+strip stamp is the absolute observation time (date, time, zone). Locale
+picks date order and 12/24h only; dates stay numeric. Locale also picks
+kilometres or miles for the scale bar and picker distances. The tick strip is
+position in the loop, not a second clock. It has 60 positions when the
+window is wide enough; compact widths show one tick per available frame
+only (empty pads need room or they read as a dotted cliff). An extra live
+sweep beyond 60 completed scans adds a selectable tick and is included in
+the frame count. Available frames fill from the left; unused positions are
+faint, short, and cannot be sought. Each available tick represents one
+frame, without extra gap ticks or a baseline.
+
 ## Location, onboarding, and map
 
 Map center and radar source are independent. The center is the place the
@@ -76,8 +117,9 @@ initial view; subsequent weather changes do not overwrite a remembered view.
 
 Explicit coordinates are honored on every launch and do not imply a radar
 lock. A configured center far from a locked radar is valid: preserve both,
-show the station and lock clearly, and offer "Use nearest radar" and "Go to
-selected radar" when that radar's coverage is outside the view. UI navigation
+show the station and lock clearly (yellow lock when coverage is outside the
+view), and offer "Use nearest radar" and "Go to selected radar" when that
+radar's coverage is outside the view. UI navigation
 and unlocking can change the active session; explicit config applies again
 on launch.
 

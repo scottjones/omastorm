@@ -2,19 +2,18 @@
 
 Open-source, live NEXRAD radar for the Omarchy desktop. Beta.
 
-[![Omastorm window: live take with loop, search, keys, and treatments](https://github.com/wesleygrimes/omastorm/releases/download/media-2026-09-09/omastorm-preview.gif)](https://github.com/wesleygrimes/omastorm/releases/download/media-2026-09-09/omastorm-demo.mp4)
+[![Omastorm window: live take with loop, search, keys, and treatments](https://github.com/wesleygrimes/omastorm/releases/download/media-2026-09-10/omastorm-preview.gif)](https://github.com/wesleygrimes/omastorm/releases/download/media-2026-09-10/omastorm-demo.mp4)
 
-Live KJAX demo: playback, pan and zoom, treatments, weak returns, station
-search, and keyboard controls.
+Live KJAX: the refactored window chrome, timeline ticks, and playback loop.
 
 A radar that lives in your bar. The popover shows the station nearest you with
-the actual scan time. Expand it for the full window: every NEXRAD site in the
-network, reflectivity at native resolution, a timeline you can scrub, all drawn
-in your Omarchy theme.
+the actual scan time. Click the map (or press Enter) for the full window: every
+NEXRAD site in the network, reflectivity at native resolution, a timeline you
+can scrub, all drawn in your Omarchy theme.
 
-![The Omastorm window, live](https://github.com/wesleygrimes/omastorm/releases/download/media-2026-09-09/window-live.png)
+![The Omastorm window, live](https://github.com/wesleygrimes/omastorm/releases/download/media-2026-09-10/window-live.png)
 
-![The Omastorm popover, live](https://github.com/wesleygrimes/omastorm/releases/download/media-2026-09-09/popover.png)
+![The Omastorm popover, live](https://github.com/wesleygrimes/omastorm/releases/download/media-2026-09-10/popover.png)
 
 A headless Rust engine fetches and decodes NEXRAD Level II data and prepares
 GPU-ready radar textures. An Omarchy plugin built with Quickshell/QML is the
@@ -74,7 +73,8 @@ Update with `omarchy plugin update com.omastorm.radar`.
 ## Use
 
 Click the mark in the bar for the popover: the map at your location, LIVE or
-the connection condition, the actual scan time, step and play, and EXPAND.
+the connection condition, the actual scan time, and step and play. Click the
+map (or press Enter) to expand.
 If no location is known, the popover offers “Choose a location,” which opens
 the picker in the window. Click the radar or press Enter for the window; it
 opens on the same station, frame, and camera. Closing preserves your view
@@ -82,11 +82,13 @@ for the next launch.
 
 In the window, drag to pan and scroll to zoom. The map follows the nearest
 station as you pan unless you lock it; a locked radar stays put even when
-the camera leaves its coverage. A station you arrive at fetches its last
-dozen scans, so there is a loop to play within a few seconds; the cache then
-grows to 60 as new scans arrive. The status slot shows the age of the frame on
-screen: LIVE, STALE after ten minutes, UNAVAILABLE or OFFLINE when the feed
-cannot be reached, with cached frames kept.
+the camera leaves its coverage, and the lock turns yellow outside the rings.
+A scale bar under the map shows ground distance in your locale (km or mi).
+A station you arrive at fetches its last dozen scans, so there is a loop to
+play within a few seconds; the cache then grows to 60 as new scans arrive.
+The stamp above the timeline is the absolute scan time; the meta line is how
+stale that frame is. LIVE, STALE after ten minutes, UNAVAILABLE or OFFLINE
+when the feed cannot be reached, with cached frames kept.
 
 | Key | Action |
 | --- | --- |
