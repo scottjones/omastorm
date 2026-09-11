@@ -16,6 +16,7 @@ docs/media/*
 
 # Local working notes, never committed
 PLAN.md
+AGENTS.md
 
 # Editor and tool state
 .venv/
