@@ -32,6 +32,7 @@ Item {
     property int labelSize: 12
     property real radarOpacity: 1    // the radar layer alone; the basemap keeps its strength
     property bool locked: false      // the accent frame on the active marker and tag (DESIGN.md, markers)
+    property bool interactive: true  // false while location prompt/picker owns the surface
     // A frame with a scan time is radar to draw. The loading placeholder
     // (docs/protocol.md, frame.status: no scan time, one blank row) draws no
     // radar; tiles, labels, markers, and coverage still show, so a station
@@ -84,7 +85,12 @@ Item {
     readonly property real viewCenterX: Math.max(width/2*unitsPerPixel, Math.min(1-width/2*unitsPerPixel, wantedX))
     readonly property real viewCenterY: Math.max(height/2*unitsPerPixel, Math.min(1-height/2*unitsPerPixel, wantedY))
     function reset() { center = null; span = Math.min(210, maxSpan); }
-    function zoom(value) { span = Math.max(25, Math.min(maxSpan, value)); }
+    signal navigated(real lat, real lon, real spanKm)
+    function zoom(value, notify) {
+        if (!interactive) return;
+        span = Math.max(25, Math.min(maxSpan, value));
+        if (notify !== false) navigated(centerLat, centerLon, span);
+    }
     function look(mx, my) { center = Qt.point(longitude(mx), latitude(my)); }
     // Centre exactly on a place. Loading frames and radar hand-offs must
     // not call this; the camera is the user's (DESIGN.md, location).
@@ -97,8 +103,10 @@ Item {
     // The keyboard pan (DESIGN.md, keyboard map): one step is an eighth of
     // the viewport's shorter side, in the given screen direction.
     function pan(dx, dy) {
+        if (!interactive) return;
         var stepPixels = Math.max(1, Math.round(Math.min(width, height) / 8)) * unitsPerPixel;
         look(viewCenterX + dx * stepPixels, viewCenterY + dy * stepPixels);
+        navigated(centerLat, centerLon, span);
     }
     readonly property real centerLat: latitude(viewCenterY)
     readonly property real centerLon: longitude(viewCenterX)
@@ -628,19 +636,25 @@ Item {
     }
     MouseArea {
         anchors.fill: parent
+        enabled: map.interactive
         cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
         property real lastX
         property real lastY
         onPressed: mouse => { lastX=mouse.x; lastY=mouse.y; }
         onPositionChanged: mouse => {
-            if(pressed) { map.look(map.viewCenterX - (mouse.x-lastX)*map.unitsPerPixel, map.viewCenterY - (mouse.y-lastY)*map.unitsPerPixel); lastX=mouse.x; lastY=mouse.y; }
+            if(pressed && (mouse.x !== lastX || mouse.y !== lastY)) {
+                map.look(map.viewCenterX - (mouse.x-lastX)*map.unitsPerPixel, map.viewCenterY - (mouse.y-lastY)*map.unitsPerPixel);
+                lastX=mouse.x; lastY=mouse.y;
+                map.navigated(map.centerLat, map.centerLon, map.span);
+            }
         }
         onWheel: wheel => {
             // Zoom about the pointer: the ground under it stays put.
             var mx=map.viewCenterX+(wheel.x-width/2)*map.unitsPerPixel;
             var my=map.viewCenterY+(wheel.y-height/2)*map.unitsPerPixel;
-            map.zoom(Math.min(map.span,map.maxSpan)*(wheel.angleDelta.y>0?.85:1/.85));
+            map.zoom(Math.min(map.span,map.maxSpan)*(wheel.angleDelta.y>0?.85:1/.85), false);
             map.look(mx-(wheel.x-width/2)*map.unitsPerPixel, my-(wheel.y-height/2)*map.unitsPerPixel);
+            map.navigated(map.centerLat, map.centerLon, map.span);
         }
         onDoubleClicked: map.resetRequested()
     }

@@ -154,3 +154,33 @@ function resolveReset(explicit, weather) {
         return { lat: weather.lat, lon: weather.lon, name: weather.name || "", source: "weather" };
     return null;
 }
+
+// wttr.in `?format=j2` nearest_area (DESIGN.md, approximate IP location).
+// j2 stays under a small body size; Omarchy's weather `j1` is much larger.
+function parseWttrCoord(value) {
+    // Number(null) and Number("") are 0 — reject those before coercing.
+    if (typeof value === "number") return value;
+    if (typeof value === "string" && value.trim()) return Number(value.trim());
+    return NaN;
+}
+
+function parseWttrHome(raw) {
+    try {
+        var json = typeof raw === "string" ? JSON.parse(raw) : raw;
+        var areas = json && json.nearest_area;
+        if (!areas || !areas.length) return null;
+        var area = areas[0];
+        var lat = parseWttrCoord(area.latitude), lon = parseWttrCoord(area.longitude);
+        if (!validPair(lat, lon)) return null;
+        var name = "";
+        var labels = [].concat(area.areaName || [], area.region || []);
+        for (var i = 0; i < labels.length; i++) {
+            var value = labels[i] && labels[i].value;
+            if (typeof value === "string" && value.trim()) {
+                name = value.trim().replace(/[\x00-\x1f\x7f]/g, "").slice(0, 100);
+                break;
+            }
+        }
+        return { name: name, lat: lat, lon: lon };
+    } catch (e) { return null; }
+}
