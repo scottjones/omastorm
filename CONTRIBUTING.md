@@ -104,14 +104,48 @@ tile shaders with `bash scripts/build-shader.sh` and commit their `.qsb` files.
 The GPU checks need a desktop OpenGL context; software Qt Quick is unsupported.
 If the environment cannot run a required check, report that explicitly.
 
-Open a pull request linking the issue. Subject is a short imperative; the body
-says why the behavior changed and how you verified it. Keep commits small.
+Open a pull request linking the issue. Keep commits small. Commit messages and
+pull request titles use
+[Angular conventional commits](https://www.conventionalcommits.org/en/v1.0.0/#summary):
+
+```text
+<type>(optional-scope): <description>
+```
+
+Use a lowercase type (`feat`, `fix`, `docs`, `refactor`, `test`, `ci`,
+`chore`, `perf`, `build`, `revert`), an imperative description, and no
+trailing period. Scope is optional; common ones are `engine`, `ui`, `docs`,
+and `scripts`. Examples:
+
+```text
+feat(ui): remember camera and station after reconnect
+fix(engine): restart a quiet live poller instead of UNAVAILABLE
+docs: document the first-time contributor path
+ci: bump jdx/mise-action to v4.3.0
+```
+
+The pull request body says why the behavior changed and how you verified it.
 Omit co-author and tool trailers. Update the relevant docs when behavior
 changes. Document current behavior, not implementation history.
 
 ## Releases
 
 Maintainers: [docs/RELEASING.md](docs/RELEASING.md).
+
+## Contributors
+
+Merged help is credited in the README with
+[all-contributors](https://allcontributors.org). On a pull request or issue,
+comment:
+
+```text
+@all-contributors please add @username for code
+```
+
+Use the right
+[emoji key](https://allcontributors.org/docs/en/emoji-key) type
+(`code`, `doc`, `bug`, `infra`, and so on). The bot opens a small follow-up
+pull request that updates the contributor table.
 
 ## Conduct
 
