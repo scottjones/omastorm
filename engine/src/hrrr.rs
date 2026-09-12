@@ -141,7 +141,7 @@ fn load_json(text: &str) -> io::Result<Decoded> {
     })
 }
 
-/// HRRR GRIB2 `.idx` line: `start:id:name:level:cycle:fcst:...`
+/// NOAA HRRR `.idx` line: `msg:byte_offset:date:name:level:fcst:`.
 #[derive(Debug, PartialEq)]
 pub struct IdxEntry {
     pub start: u64,
@@ -150,21 +150,22 @@ pub struct IdxEntry {
 }
 
 pub fn parse_idx(text: &str) -> Vec<IdxEntry> {
-    let mut starts: Vec<(u64, String, String)> = Vec::new();
+    let mut out = Vec::new();
     for line in text.lines() {
-        let mut parts = line.splitn(6, ':');
-        let Some(start) = parts.next().and_then(|s| s.parse().ok()) else {
+        let parts: Vec<&str> = line.splitn(6, ':').collect();
+        if parts.len() < 5 {
+            continue;
+        }
+        let Some(start) = parts[1].parse().ok() else {
             continue;
         };
-        let _id = parts.next();
-        let Some(name) = parts.next() else { continue };
-        let Some(level) = parts.next() else { continue };
-        starts.push((start, name.to_string(), level.to_string()));
+        out.push(IdxEntry {
+            start,
+            name: parts[3].to_string(),
+            level: parts[4].to_string(),
+        });
     }
-    starts
-        .into_iter()
-        .map(|(start, name, level)| IdxEntry { start, name, level })
-        .collect()
+    out
 }
 
 fn field_range(idx: &[IdxEntry], name: &str, level: &str) -> Option<(u64, u64)> {
@@ -324,28 +325,103 @@ fn decode_grib_pair(
 struct NativeGrid {
     ni: u32,
     nj: u32,
-    /// Lambert or lat/lon corners used for a bilinear-ish nearest lookup.
-    lat_first: f64,
-    lon_first: f64,
-    lat_last: f64,
-    lon_last: f64,
     values: Vec<f32>,
+    proj: Projection,
 }
+
+enum Projection {
+    LatLon {
+        lat_first: f64,
+        lon_first: f64,
+        lat_last: f64,
+        lon_last: f64,
+    },
+    Lambert {
+        lat1: f64,
+        lon1: f64,
+        latin1: f64,
+        latin2: f64,
+        lov: f64,
+        dx: f64,
+        dy: f64,
+    },
+}
+
+const EARTH_M: f64 = 6_371_229.0;
 
 impl NativeGrid {
     fn latlon_to_ij(&self, lat: f64, lon: f64) -> Option<(usize, usize)> {
         if self.ni < 2 || self.nj < 2 {
             return None;
         }
-        let fx = (lon - self.lon_first) / (self.lon_last - self.lon_first);
-        let fy = (self.lat_first - lat) / (self.lat_first - self.lat_last);
-        if !(0.0..=1.0).contains(&fx) || !(0.0..=1.0).contains(&fy) {
-            return None;
+        match self.proj {
+            Projection::LatLon {
+                lat_first,
+                lon_first,
+                lat_last,
+                lon_last,
+            } => {
+                let fx =
+                    (lon_360(lon) - lon_360(lon_first)) / (lon_360(lon_last) - lon_360(lon_first));
+                let fy = (lat_first - lat) / (lat_first - lat_last);
+                if !(0.0..=1.0).contains(&fx) || !(0.0..=1.0).contains(&fy) {
+                    return None;
+                }
+                let i = (fx * f64::from(self.ni - 1)).round() as usize;
+                let j = (fy * f64::from(self.nj - 1)).round() as usize;
+                Some((i.min(self.ni as usize - 1), j.min(self.nj as usize - 1)))
+            }
+            Projection::Lambert {
+                lat1,
+                lon1,
+                latin1,
+                latin2,
+                lov,
+                dx,
+                dy,
+            } => {
+                let (x1, y1) = lcc_xy(lat1, lon1, latin1, latin2, lov);
+                let (x, y) = lcc_xy(lat, lon, latin1, latin2, lov);
+                let i = ((x - x1) / dx).round();
+                let j = ((y - y1) / dy).round();
+                if i < 0.0 || j < 0.0 {
+                    return None;
+                }
+                let i = i as usize;
+                let j = j as usize;
+                if i >= self.ni as usize || j >= self.nj as usize {
+                    return None;
+                }
+                Some((i, j))
+            }
         }
-        let i = (fx * f64::from(self.ni - 1)).round() as usize;
-        let j = (fy * f64::from(self.nj - 1)).round() as usize;
-        Some((i.min(self.ni as usize - 1), j.min(self.nj as usize - 1)))
     }
+}
+
+fn lon_360(lon: f64) -> f64 {
+    if lon < 0.0 { lon + 360.0 } else { lon }
+}
+
+/// Lambert conformal (x, y) metres relative to the cone origin at LoV.
+fn lcc_xy(lat_deg: f64, lon_deg: f64, latin1: f64, latin2: f64, lov: f64) -> (f64, f64) {
+    let lat = lat_deg.to_radians();
+    let lon = lon_360(lon_deg).to_radians();
+    let l1 = latin1.to_radians();
+    let l2 = latin2.to_radians();
+    let lov = lon_360(lov).to_radians();
+    let n = if (l1 - l2).abs() < 1e-8 {
+        l1.sin()
+    } else {
+        (l1.cos() / l2.cos()).ln()
+            / ((std::f64::consts::FRAC_PI_4 + l2 / 2.0).tan()
+                / (std::f64::consts::FRAC_PI_4 + l1 / 2.0).tan())
+            .ln()
+    };
+    let f = l1.cos() * (std::f64::consts::FRAC_PI_4 + l1 / 2.0).tan().powf(n) / n;
+    let rho = EARTH_M * f / (std::f64::consts::FRAC_PI_4 + lat / 2.0).tan().powf(n);
+    let theta = n * (lon - lov);
+    // y increases north: equivalent to rho0 - rho*cos(theta) up to a constant.
+    (rho * theta.sin(), -rho * theta.cos())
 }
 
 /// Minimal GRIB2 simple-packing reader for one 2-D field. HRRR 10 m U/V
@@ -368,16 +444,13 @@ fn grib_simple_grid(bytes: &[u8]) -> io::Result<NativeGrid> {
     let packed = sections
         .remove(&7)
         .ok_or_else(|| io::Error::other("GRIB2 missing data section"))?;
-    let (ni, nj, lat_first, lon_first, lat_last, lon_last) = grid_latlon(&grid)?;
+    let (ni, nj, proj) = grid_proj(&grid)?;
     let values = unpack_simple(&datarep, &packed, (ni * nj) as usize)?;
     Ok(NativeGrid {
         ni,
         nj,
-        lat_first,
-        lon_first,
-        lat_last,
-        lon_last,
         values,
+        proj,
     })
 }
 
@@ -399,43 +472,75 @@ fn parse_sections(bytes: &[u8]) -> io::Result<std::collections::HashMap<u8, Vec<
     Ok(map)
 }
 
-/// Section 3 template 0 (lat/lon) is enough for a resampled field; Lambert
-/// (template 30) uses the first/last lat/lon in the template for a nearest
-/// lookup, which is coarse but honest about being a model grid.
-fn grid_latlon(section3: &[u8]) -> io::Result<(u32, u32, f64, f64, f64, f64)> {
-    if section3.len() < 30 {
+/// Section 3 body (after length + section number). Template 0 is regular
+/// lat/lon; template 30 is Lambert, which is what HRRR CONUS uses.
+fn grid_proj(section3: &[u8]) -> io::Result<(u32, u32, Projection)> {
+    if section3.len() < 56 {
         return Err(io::Error::other("GRIB2 grid section too short"));
     }
-    // After the 5-byte section header we already stripped: octet 6-... of
-    // section 3 live in this slice starting at 0 as "source of grid".
-    // ni at octets 31-34 of the section = slice index 25-28? Let's use
-    // documented offsets from the start of the section body (after length+number).
-    // Body[0]=source, [1..5]=data point count, [5]=optional list, [6-7]=template.
-    if section3.len() < 56 {
-        return Err(io::Error::other("GRIB2 grid template truncated"));
-    }
-    let template = u16::from_be_bytes([section3[6], section3[7]]);
-    let ni = u32::from_be_bytes(section3[14..18].try_into().unwrap());
-    let nj = u32::from_be_bytes(section3[18..22].try_into().unwrap());
-    // Template 0: lat1 at 22-25? Actual template 0: Ni 31-34 of full section.
-    // Full section = 5 byte header + body. Body index 14 is octet 19...
-    // Keep a conservative read used by HRRR Lambert (template 30):
-    // lat1 (octets 39-42 of section), lon1 (43-46), lat2/LaD etc.
-    let lat1 = i32::from_be_bytes(section3[33..37].try_into().unwrap()) as f64 * 1e-6;
-    let lon1 = i32::from_be_bytes(section3[37..41].try_into().unwrap()) as f64 * 1e-6;
-    let (lat2, lon2) = if template == 0 && section3.len() >= 49 {
-        let lat2 = i32::from_be_bytes(section3[42..46].try_into().unwrap()) as f64 * 1e-6;
-        let lon2 = i32::from_be_bytes(section3[46..50].try_into().unwrap()) as f64 * 1e-6;
-        (lat2, lon2)
-    } else {
-        // Lambert: opposite corner is not stored as lat2/lon2; use CONUS
-        // envelope so nearest lookup still covers the domain.
-        (SOUTH, EAST)
+    let template = u16::from_be_bytes([section3[7], section3[8]]);
+    let micro =
+        |at: usize| i32::from_be_bytes(section3[at..at + 4].try_into().unwrap()) as f64 * 1e-6;
+    let (ni, nj, proj) = match template {
+        0 => {
+            let ni = u32::from_be_bytes(section3[25..29].try_into().unwrap());
+            let nj = u32::from_be_bytes(section3[29..33].try_into().unwrap());
+            let lat1 = micro(33);
+            let lon1 = micro(37);
+            let lat2 = micro(42);
+            let lon2 = micro(46);
+            (
+                ni,
+                nj,
+                Projection::LatLon {
+                    lat_first: lat1,
+                    lon_first: lon1,
+                    lat_last: lat2,
+                    lon_last: lon2,
+                },
+            )
+        }
+        30 => {
+            let ni = u32::from_be_bytes(section3[25..29].try_into().unwrap());
+            let nj = u32::from_be_bytes(section3[29..33].try_into().unwrap());
+            let lat1 = micro(33);
+            let lon1 = micro(37);
+            let lov = micro(46);
+            let dx = f64::from(u32::from_be_bytes(section3[50..54].try_into().unwrap())) / 1000.0;
+            let dy = f64::from(u32::from_be_bytes(section3[54..58].try_into().unwrap())) / 1000.0;
+            let latin1 = micro(60);
+            let latin2 = micro(64);
+            (
+                ni,
+                nj,
+                Projection::Lambert {
+                    lat1,
+                    lon1,
+                    latin1,
+                    latin2,
+                    lov,
+                    dx,
+                    dy,
+                },
+            )
+        }
+        other => {
+            return Err(io::Error::other(format!(
+                "GRIB2 grid template {other} not supported"
+            )));
+        }
     };
     if ni == 0 || nj == 0 {
         return Err(io::Error::other("GRIB2 empty grid"));
     }
-    Ok((ni, nj, lat1, lon1, lat2, lon2))
+    Ok((ni, nj, proj))
+}
+
+/// GRIB2 signed integers are sign-magnitude, not two's complement.
+fn grib_i16(bytes: [u8; 2]) -> i32 {
+    let u = u16::from_be_bytes(bytes);
+    let mag = i32::from(u & 0x7fff);
+    if u & 0x8000 != 0 { -mag } else { mag }
 }
 
 fn unpack_simple(section5: &[u8], packed: &[u8], n: usize) -> io::Result<Vec<f32>> {
@@ -449,15 +554,15 @@ fn unpack_simple(section5: &[u8], packed: &[u8], n: usize) -> io::Result<Vec<f32
         )));
     }
     let reference = f32::from_be_bytes(section5[6..10].try_into().unwrap());
-    let binary_scale = i16::from_be_bytes([section5[10], section5[11]]);
-    let decimal_scale = i16::from_be_bytes([section5[12], section5[13]]);
+    let binary_scale = grib_i16([section5[10], section5[11]]);
+    let decimal_scale = grib_i16([section5[12], section5[13]]);
     let bits = section5[14] as usize;
     if bits == 0 || bits > 32 {
         return Err(io::Error::other("GRIB2 bit depth"));
     }
     let mut values = Vec::with_capacity(n);
-    let scale_b = 2f32.powi(i32::from(binary_scale));
-    let scale_d = 10f32.powi(i32::from(decimal_scale));
+    let scale_b = 2f32.powi(binary_scale);
+    let scale_d = 10f32.powi(decimal_scale);
     for i in 0..n {
         let raw = read_bits(packed, i * bits, bits)?;
         values.push((reference + raw as f32 * scale_b) / scale_d);
@@ -496,21 +601,45 @@ mod tests {
     }
 
     #[test]
+    fn hrrr_sw_corner_is_grid_origin() {
+        let lat1 = 21.138123;
+        let lon1 = 237.280472;
+        let grid = NativeGrid {
+            ni: 1799,
+            nj: 1059,
+            values: vec![0.0; 2],
+            proj: Projection::Lambert {
+                lat1,
+                lon1,
+                latin1: 38.5,
+                latin2: 38.5,
+                lov: 262.5,
+                dx: 3000.0,
+                dy: 3000.0,
+            },
+        };
+        assert_eq!(grid.latlon_to_ij(lat1, lon1), Some((0, 0)));
+        let nyc = grid.latlon_to_ij(40.7, -74.0);
+        assert!(nyc.is_some(), "NYC should sit on the HRRR CONUS grid");
+        let (i, j) = nyc.unwrap();
+        assert!(i > 0 && j > 0 && i < 1798 && j < 1058, "i={i} j={j}");
+    }
+
+    #[test]
     fn idx_finds_10m_wind_ranges() {
         let idx = "\
-0:0:date\n\
-100:1:UGRD:10 m above ground:anl:\n\
-500:2:VGRD:10 m above ground:anl:\n\
-900:3:TMP:2 m above ground:anl:
+77:43379677:d=2026091218:UGRD:10 m above ground:anl:\n\
+78:45523149:d=2026091218:VGRD:10 m above ground:anl:\n\
+79:47666621:d=2026091218:WIND:10 m above ground:0-0 day max fcst:
 ";
         let entries = parse_idx(idx);
         assert_eq!(
             field_range(&entries, "UGRD", "10 m above ground"),
-            Some((100, 499))
+            Some((43379677, 45523148))
         );
         assert_eq!(
             field_range(&entries, "VGRD", "10 m above ground"),
-            Some((500, 899))
+            Some((45523149, 47666620))
         );
     }
 }
