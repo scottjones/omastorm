@@ -142,11 +142,11 @@ pub fn parse_metar_json(text: &str) -> Vec<WindObs> {
         #[serde(default)]
         lon: f64,
         #[serde(default)]
-        wdir: Option<i32>,
+        wdir: serde_json::Value,
         #[serde(default)]
-        wspd: Option<f64>,
+        wspd: serde_json::Value,
         #[serde(default)]
-        wgst: Option<f64>,
+        wgst: serde_json::Value,
         #[serde(default, rename = "obsTime")]
         obs_time: Option<i64>,
         #[serde(default, rename = "reportTime")]
@@ -182,13 +182,21 @@ pub fn parse_metar_json(text: &str) -> Vec<WindObs> {
                 network: "METAR".into(),
                 lat: row.lat,
                 lon: row.lon,
-                speed_ms: row.wspd.map(|kt| kt * 0.514444),
-                gust_ms: row.wgst.map(|kt| kt * 0.514444),
-                dir_deg: row.wdir,
+                speed_ms: json_f64(&row.wspd).map(|kt| kt * 0.514444),
+                gust_ms: json_f64(&row.wgst).map(|kt| kt * 0.514444),
+                dir_deg: json_f64(&row.wdir).map(|d| d.round() as i32),
                 observed_at,
             }
         })
         .collect()
+}
+
+fn json_f64(value: &serde_json::Value) -> Option<f64> {
+    match value {
+        serde_json::Value::Number(n) => n.as_f64(),
+        serde_json::Value::String(s) => s.parse().ok(),
+        _ => None,
+    }
 }
 
 fn parse_f64(col: &str) -> Option<f64> {
@@ -254,5 +262,14 @@ KTLX     35.333  -97.278 2026 09 12 13 00  MM    MM    MM   MM
         assert_eq!(obs[0].network, "METAR");
         assert!((obs[0].speed_ms.unwrap() - 12.0 * 0.514444).abs() < 1e-4);
         assert_eq!(obs[0].dir_deg, Some(270));
+    }
+
+    #[test]
+    fn metar_variable_wind_does_not_drop_the_list() {
+        let json = r#"[{"icaoId":"KABC","lat":40.0,"lon":-74.0,"wdir":"VRB","wspd":5,"reportTime":"2026-09-12T13:52:00Z"},{"icaoId":"KDEF","lat":40.1,"lon":-74.1,"wdir":270,"wspd":8,"reportTime":"2026-09-12T13:52:00Z"}]"#;
+        let obs = parse_metar_json(json);
+        assert_eq!(obs.len(), 2);
+        assert_eq!(obs[0].dir_deg, None);
+        assert_eq!(obs[1].dir_deg, Some(270));
     }
 }
