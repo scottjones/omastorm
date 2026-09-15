@@ -48,9 +48,7 @@ azimuth lookup. The UI samples these directly; radar arrays never enter JSON
 or QML JavaScript.
 
 `src/wind_obs.rs` fetches NDBC latest_obs and METARs after `wind_needed`.
-`src/hrrr.rs` range-gets 10 m U/V from the HRRR GRIB2 index, or a JSON grid
-when `OMASTORM_HRRR` is set. Both land on `state` as separate keys from the
-radar frame.
+Observations land on `state.windObs`, separate from the radar frame.
 
 Fetch is [docs/radar-fetch.md](../docs/radar-fetch.md). `src/live_index.rs`
 reads the last archive volume header, then lists the slots after it in the

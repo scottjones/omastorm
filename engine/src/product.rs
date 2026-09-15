@@ -86,13 +86,6 @@ impl Product {
     }
 }
 
-/// HRRR 10 m wind speed classes, m/s. Used for the Cartesian overlay texture.
-pub const WIND_UNITS: &str = "m/s";
-pub const WIND_PALETTE: [&str; 8] = [
-    "#f4f4f4", "#c8e6c8", "#7bc87b", "#e8d44a", "#f0a020", "#e05020", "#b01030", "#6a0860",
-];
-pub const WIND_BOUNDS: [i32; 9] = [0, 3, 6, 10, 15, 20, 25, 30, 50];
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,7 +100,6 @@ mod tests {
                 product.code()
             );
         }
-        assert_eq!(WIND_BOUNDS.len(), WIND_PALETTE.len() + 1);
     }
 
     #[test]

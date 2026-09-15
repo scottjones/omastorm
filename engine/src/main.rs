@@ -1,5 +1,4 @@
 mod catalog;
-mod hrrr;
 mod live;
 mod live_index;
 mod osm;
@@ -497,29 +496,6 @@ fn initial_state(
         },
         playing: false,
         wind_obs: Vec::new(),
-        wind_field: empty_wind_field(),
-    }
-}
-fn empty_wind_field() -> protocol::WindField {
-    protocol::WindField {
-        status: protocol::WindFieldStatus::Unavailable,
-        source: "HRRR".into(),
-        valid_time: String::new(),
-        forecast_hour: 0,
-        units: product::WIND_UNITS.into(),
-        texture: String::new(),
-        west: 0.0,
-        south: 0.0,
-        east: 0.0,
-        north: 0.0,
-        width: 0,
-        height: 0,
-        palette: product::WIND_PALETTE
-            .iter()
-            .map(|c| (*c).to_string())
-            .collect(),
-        bounds: product::WIND_BOUNDS.to_vec(),
-        attribution: "NOAA NCEP HRRR".into(),
     }
 }
 fn line(message: &Message) -> String {
@@ -549,13 +525,11 @@ struct Shared {
     template: Frame,
     /// Radar moment on screen (`set_product`).
     product: Product,
-    /// Last settled map centre, for wind observations and HRRR.
+    /// Last settled map centre, for wind observations.
     view: Option<(f64, f64)>,
     /// Archived volume bytes, so `set_product` can decode velocity.
     archive: Option<Vec<u8>>,
-    /// HRRR forecast hour (0 = analysis).
-    wind_hour: u32,
-    /// Wakes the wind fetch task.
+    /// Wakes the wind-observation fetch task.
     wind_wake: Arc<Notify>,
     /// Velocity textures for the sweep in progress, when the cut carries VEL.
     pending_vel: Option<Pending>,
@@ -1024,22 +998,6 @@ impl Shared {
             Err(e) => (false, Some(e)),
         }
     }
-    fn set_wind_forecast(&mut self, hour: u32) -> (bool, Option<String>) {
-        if hour > 18 {
-            return (
-                false,
-                Some("set_wind_forecast hour must be 0 through 18.".into()),
-            );
-        }
-        if hour == self.wind_hour {
-            return (false, None);
-        }
-        self.wind_hour = hour;
-        self.state.wind_field.status = protocol::WindFieldStatus::Loading;
-        self.state.wind_field.forecast_hour = hour;
-        self.wind_wake.notify_one();
-        (true, None)
-    }
     fn wind_needed(&mut self, lat: Option<f64>, lon: Option<f64>) -> (bool, Option<String>) {
         match (lat, lon) {
             (None, None) => {}
@@ -1080,7 +1038,6 @@ impl Shared {
                 product,
                 elevation_index,
             } => self.set_product(&product, elevation_index),
-            Command::SetWindForecast { hour } => self.set_wind_forecast(hour),
             Command::WindNeeded { lat, lon } => self.wind_needed(lat, lon),
             // Tile requests and place search are answered to the sender, not state.
             Command::TilesNeeded { .. } | Command::SearchPlaces { .. } | Command::Unsupported => {
@@ -1398,15 +1355,14 @@ async fn player(shared: Arc<Mutex<Shared>>, wake: Arc<Notify>) {
         }
     }
 }
-/// Fetch NDBC/METAR observations and the HRRR 10 m field for the last view
-/// (or the selected site). A missing centre waits; a fixture env skips the
-/// network. Failures leave the previous values and mark the field unavailable.
+/// Fetch NDBC/METAR observations for the last view (or the selected site).
+/// A missing centre waits; `OMASTORM_WIND_OBS` skips the network.
 async fn wind_loop(shared: Arc<Mutex<Shared>>, wake: Arc<Notify>) {
     loop {
         let _ = timeout(Duration::from_secs(300), wake.notified()).await;
-        let (lat, lon, hour) = {
+        let (lat, lon) = {
             let shared = shared.lock().unwrap();
-            let (lat, lon) = match shared.view {
+            match shared.view {
                 Some(pair) => pair,
                 None => {
                     let id = &shared.state.site.id;
@@ -1415,50 +1371,15 @@ async fn wind_loop(shared: Arc<Mutex<Shared>>, wake: Arc<Notify>) {
                         None => continue,
                     }
                 }
-            };
-            (lat, lon, shared.wind_hour)
+            }
         };
         let obs = wind_obs::load(lat, lon).await.unwrap_or_else(|e| {
             eprintln!("wind obs: {e}");
             Vec::new()
         });
-        let field = match hrrr::load(hour).await {
-            Ok(decoded) => match decoded.encode() {
-                Ok((png, mut field)) => {
-                    let dir = shared.lock().unwrap().dir.clone();
-                    match publish(&dir, "hrrr", &format!("f{hour:02}"), &png) {
-                        Ok(path) => {
-                            field.texture = path;
-                            field
-                        }
-                        Err(e) => {
-                            eprintln!("HRRR texture: {e}");
-                            empty_wind_field()
-                        }
-                    }
-                }
-                Err(e) => {
-                    eprintln!("HRRR encode: {e}");
-                    empty_wind_field()
-                }
-            },
-            Err(e) => {
-                eprintln!("HRRR: {e}");
-                let mut field = empty_wind_field();
-                field.forecast_hour = hour;
-                field
-            }
-        };
         let mut shared = shared.lock().unwrap();
-        let obs_changed = shared.state.wind_obs != obs;
-        let field_changed = shared.state.wind_field != field;
-        if obs_changed {
+        if shared.state.wind_obs != obs {
             shared.state.wind_obs = obs;
-        }
-        if field_changed {
-            shared.state.wind_field = field;
-        }
-        if obs_changed || field_changed {
             shared.broadcast();
         }
     }
@@ -1932,7 +1853,6 @@ fn serve(dir: PathBuf) -> io::Result<()> {
         product: Product::Reflectivity,
         view: None,
         archive: archive_bytes,
-        wind_hour: 0,
         wind_wake: wind_wake.clone(),
         wake: wake.clone(),
         last_broadcast: String::new(),

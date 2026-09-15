@@ -17,12 +17,10 @@ const ARCHIVE: &str = concat!(
     "/../data/raw/KTLX20130520_201643_V06.gz"
 );
 const WIND_OBS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/data/wind-obs-fixture.txt");
-const HRRR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/data/hrrr-fixture.json");
 fn engine_cmd() -> Command {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_omastorm-engine"));
     cmd.env("OMASTORM_ARCHIVE", ARCHIVE)
-        .env("OMASTORM_WIND_OBS", WIND_OBS)
-        .env("OMASTORM_HRRR", HRRR);
+        .env("OMASTORM_WIND_OBS", WIND_OBS);
     cmd
 }
 /// How long a daemon may take to decode the archive and listen, and how long
@@ -674,17 +672,13 @@ fn set_product_velocity_and_wind_layers() {
     assert_eq!(back["frame"]["product"], "REF");
     send(&mut client, json!({"type":"lock","enabled":true}));
     assert_eq!(read(&mut client)["site"]["locked"], true);
-    send(&mut client, json!({"type":"set_wind_forecast","hour":6}));
-    let loading = read(&mut client);
-    assert_eq!(loading["windField"]["forecastHour"], 6);
     send(
         &mut client,
         json!({"type":"wind_needed","lat":40.25,"lon":-73.16}),
     );
     let deadline = Instant::now() + REPLY;
     let mut saw_obs = false;
-    let mut saw_field = false;
-    while Instant::now() < deadline && (!saw_obs || !saw_field) {
+    while Instant::now() < deadline && !saw_obs {
         let msg = read(&mut client);
         if msg["type"] != "state" {
             continue;
@@ -692,18 +686,8 @@ fn set_product_velocity_and_wind_layers() {
         if msg["windObs"].as_array().is_some_and(|a| !a.is_empty()) {
             saw_obs = true;
             assert_eq!(msg["windObs"][0]["network"], "NDBC");
-        }
-        if msg["windField"]["status"] == "ok" {
-            saw_field = true;
-            assert_eq!(msg["windField"]["source"], "HRRR");
-            assert!(
-                msg["windField"]["texture"]
-                    .as_str()
-                    .unwrap()
-                    .starts_with("tex/")
-            );
+            assert!(msg.get("windField").is_none());
         }
     }
     assert!(saw_obs, "expected NDBC observations near the view");
-    assert!(saw_field, "expected HRRR fixture field");
 }

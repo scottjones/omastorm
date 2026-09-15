@@ -161,15 +161,9 @@ Level II is what is drawn for radar: reflectivity (`REF`) and radial velocity
 (`VEL`). Velocity is the component toward or away from the dish, not wind at
 a mast.
 
-Surface wind is a separate layer, never mixed into the polar sweep or the
-radar tick strip:
-
-- **Observations** (`windObs`): NDBC buoys/C-MAN and METARs, stamped with
-  observation time and network. Dots, not a filled field.
-- **HRRR 10 m** (`windField`): a labeled model overlay. Valid time and
-  forecast hour are on the field, not on the sweep stamp. Attribution is
-  NOAA NCEP HRRR. This is the one allowed forecast: it must stay named as a
-  model.
+Surface wind observations (`windObs`) are a separate layer: NDBC buoys/C-MAN
+and METARs, stamped with observation time and network. Dots, not a filled
+field, never mixed into the polar sweep or the radar tick strip. No forecasts.
 
 Live join is [docs/radar-fetch.md](docs/radar-fetch.md): read the last
 archive volume header, then poll the slots after it in the chunk bucket.
