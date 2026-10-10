@@ -159,6 +159,7 @@ selection uses the protocol's nearest-station hysteresis while the held dish
 covers the center; leaving its coverage bypasses hysteresis. Cross-family and
 grid selection follow [docs/grid-adapters.md](docs/grid-adapters.md). Lock pins
 one exact dish or mosaic; `n` releases it and selects from the center without
+moving the camera. `Shift+N` locks the mosaic covering the center, also without
 moving the camera. Choosing a station in search (or from the station title)
 locks it and centres the map on that site. Live mosaic sources appear in that
 same radar list — covering mosaics on an empty browse, and by id or name when
@@ -167,14 +168,14 @@ are not fake dishes and there is no separate provider picker. Automatic
 hand-off and loading a frame never move the camera. Persist only an explicit
 lock, never an automatically selected source.
 
-NOAA MRMS (`mrms-conus`) is a manual-only contiguous-U.S. mosaic. It appears
-in the same picker by id/name, or in empty browsing inside its domain or
-while selected. Its coverage describes browsing and the lock indication;
-it never makes MRMS eligible for automatic follow, unlock, or place selection.
-It uses the measured QC base product, actual observation seconds, NOAA/NSSL
-MRMS attribution, and the existing dBZ palette. Missing/no coverage draw
-transparent, measured negative values remain measured, and no METAR overlay
-or weak-return floor applies.
+NOAA MRMS (`mrms-conus`) is a manual-only contiguous-U.S. mosaic. `Shift+N`
+selects it inside its domain; it appears in the same picker by id/name, and in
+empty browsing only while selected. Its coverage describes browsing and the
+lock indication; it never makes MRMS eligible for automatic follow, unlock, or
+place selection. It uses the measured QC base product, actual observation
+seconds, NOAA/NSSL MRMS attribution, and the existing dBZ palette. Missing/no
+coverage draw transparent, measured negative values remain measured, and no
+METAR overlay or weak-return floor applies.
 
 Closing preserves the view. Reopening restores it, with explicit config
 values taking precedence. Expanding the popover preserves its center, zoom,
@@ -203,12 +204,13 @@ source while its replacement loads. A source change clears that frame, and
 the first ready sweep fades in briefly. Display one radar station’s sweep
 at a time.
 
-A grid frame is presented only after its decoded image and actual GPU texture
-both match the frame's native dimensions. Qt can silently shrink an oversized
-upload, so image readiness alone is insufficient. Unsupported dimensions or
-failed verification hide the radar and show a readable error in both surfaces;
-the user can choose another source. Recheck each replacement and recreated
-scene graph, and discard results from superseded checks.
+A grid frame wider or taller than 4096 px is presented only after its decoded
+image and actual GPU texture both match the frame's native dimensions. Qt can
+silently shrink an oversized upload, so image readiness alone is insufficient.
+Unsupported dimensions or failed verification hide the radar and show a
+readable error in both surfaces; the user can choose another source. A size
+that passed stays verified until the scene graph is recreated; discard results
+from superseded checks.
 
 ## Split
 

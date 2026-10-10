@@ -727,7 +727,7 @@ Item {
         if (!buffer || !buffer.snapshot || !drawable
             || buffer.snapshot.key !== sweepKey || buffer.snapshot.texture !== texture
             || buffer.snapshot.lut !== azimuthLut || !buffer.ready
-            || buffer.snapshot.scan.kind === "mosaic" && !textureCheck.ready) return;
+            || needsTextureCheck(buffer.snapshot.scan) && !textureCheck.ready) return;
         frontBuffer = buffer;
         loadingBuffer = null;
     }
@@ -759,12 +759,18 @@ Item {
     }
     SweepBuffer { id: sweepA }
     SweepBuffer { id: sweepB }
+    // Only grids past 4096 px risk a silent downscale: every GPU this runs
+    // on uploads 4096 natively, and the check needs ES 3, which would turn
+    // OPERA away on GLES2 machines that draw it today.
+    function needsTextureCheck(frame) {
+        return !!frame && frame.kind === "mosaic" && Math.max(frame.width, frame.height) > 4096;
+    }
     TextureCheck {
         id: textureCheck
         readonly property var frame: map.loadingBuffer && map.loadingBuffer.snapshot
             ? map.loadingBuffer.snapshot.scan : null
-        image: frame && frame.kind === "mosaic" ? map.loadingBuffer.sweep : null
-        expectedSize: frame && frame.kind === "mosaic" ? Qt.size(frame.width, frame.height) : Qt.size(0, 0)
+        image: map.needsTextureCheck(frame) ? map.loadingBuffer.sweep : null
+        expectedSize: map.needsTextureCheck(frame) ? Qt.size(frame.width, frame.height) : Qt.size(0, 0)
         onReadyChanged: if (ready) Qt.callLater(map.presentSweep)
     }
     // The frame's palette as a bands x 1 strip; the shader samples

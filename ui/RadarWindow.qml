@@ -263,6 +263,7 @@ Item {
         switch (action) {
         case "search": treatmentMenu.close(); locationPicker.show(""); break;
         case "nearest": nearest(); break;
+        case "mosaic": coveringMosaic(); break;
         case "lock": toggleLock(); break;
         case "locate": locateMe(); break;
         case "pan_left": map.pan(-1, 0); break;
@@ -331,6 +332,15 @@ Item {
         var s = map.nearest();
         if (!state || !s) return;
         store.followNearest(s.id);
+    }
+    // Shift+N locks the mosaic covering the center, camera staying put; `n`
+    // hands back to the nearest station.
+    function coveringMosaic() {
+        if (!state) return;
+        var m = Location.coveringMosaic(engine.sources, map.centerLat, map.centerLon);
+        if (!m) { flashMap("No mosaic covers this area"); return; }
+        if (engine.source && engine.source.id === m.id) return;
+        store.setLock(Location.mosaicLock(m.id), true);
     }
     function locateMe() {
         if (!store.hasView || store.needsLocation) return;

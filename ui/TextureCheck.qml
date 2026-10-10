@@ -4,6 +4,8 @@ import QtQuick.Window
 // Image.Ready describes the decoded PNG, not the GPU texture: Qt may shrink
 // it during upload. Check the actual sampler before presenting a grid frame.
 // Only a 16×16 result is read back; the radar pixels stay on the GPU.
+// A size that passed once passes for every frame until the scene graph is
+// recreated, so playback does not wait on a readback per frame.
 Item {
     id: check
     width: 16; height: 16
@@ -16,11 +18,12 @@ Item {
     property int generation: 0
     property bool pending: false
     property var grab: null
+    property var verified: ({})
 
     onImageChanged: restart()
     onExpectedSizeChanged: restart()
     onVisibleChanged: restart()
-    Window.onWindowChanged: restart()
+    Window.onWindowChanged: { verified = ({}); restart(); }
     Connections {
         target: check.image
         function onSourceChanged() { check.restart(); }
@@ -29,7 +32,7 @@ Item {
     Connections {
         target: check.Window.window
         function onVisibleChanged() { check.restart(); }
-        function onSceneGraphInvalidated() { check.restart(); }
+        function onSceneGraphInvalidated() { check.verified = ({}); check.restart(); }
     }
     function releaseGrab() {
         if (grab) reader.unloadImage(grab.url);
@@ -63,6 +66,10 @@ Item {
             fail("Radar image dimensions do not match the frame.");
             return;
         }
+        if (verified[sizeKey()]) {
+            accepted = true;
+            return;
+        }
         if (GraphicsInfo.api === GraphicsInfo.Software) {
             fail("Radar requires GPU rendering (OpenGL/Vulkan).");
             return;
@@ -77,6 +84,7 @@ Item {
             readResult(); // ItemGrabResult images can be available synchronously.
         }, Qt.size(16, 16))) fail("Could not verify the radar texture on this GPU.");
     }
+    function sizeKey() { return expectedSize.width + "x" + expectedSize.height; }
     function readResult() {
         if (!pending || !grab || !reader.isImageLoaded(grab.url)) return;
         // Context2D's overload dispatch needs a JS string, not a QUrl value.
@@ -88,6 +96,7 @@ Item {
             pending = false;
             deadline.stop();
             releaseGrab();
+            verified[sizeKey()] = true;
             accepted = true;
         } else if (pixels.length >= 4 && pixels[0] === 255 && pixels[1] === 0
             && pixels[2] === 0 && pixels[3] === 255) {
