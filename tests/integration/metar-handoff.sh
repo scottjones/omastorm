@@ -15,20 +15,23 @@ printf '{"lat":37.5,"lon":-95,"span":4000}\n' > "$scratch/state.json"
 # Keep the actual protocol decoder and property bindings. Only replace the
 # socket transport with an outbound-command counter and expose each engine
 # to the test driver. No installed daemon or remote service participates.
-ruby - "$scratch/ui" <<'RUBY'
-dir = ARGV.fetch(0)
-path = "#{dir}/Engine.qml"
-stub = lambda { |t, from, to| t.include?(from) ? t.sub(from, to) : abort("Engine.qml changed: #{from}") }
-text = stub.(File.read(path), 'connected: true', 'connected: false')
-text = stub.(text, 'running: engine.socket && !engine.socket.connected && !engine.incompatible', 'running: false')
-text = stub.(text, '    function send(command) {', <<~'QML')
-    property int metarQueries: 0
+python3 - "$scratch/ui" <<'PY'
+import sys
+path = sys.argv[1] + "/Engine.qml"
+text = open(path).read()
+def stub(text, old, new):
+    if old not in text:
+        sys.exit(f"Engine.qml changed: {old}")
+    return text.replace(old, new, 1)
+text = stub(text, 'connected: true', 'connected: false')
+text = stub(text, 'running: engine.socket && !engine.socket.connected && !engine.incompatible', 'running: false')
+text = stub(text, '    function send(command) {', """    property int metarQueries: 0
     function send(command) {
         if (command.type === "metar_query") metarQueries++;
         return;
-QML
-File.write(path, text)
-RUBY
+""")
+open(path, "w").write(text)
+PY
 cat > "$scratch/ui/Handoff.qml" <<'QML'
 import QtQuick
 import Quickshell

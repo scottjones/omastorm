@@ -15,39 +15,35 @@ cp manifest.json "$scratch/root/manifest.json"
 printf 'exit 0\n' > "$scratch/root/run.sh"
 printf 'center_lat = 37.5\ncenter_lon = -95\n' > "$scratch/config.toml"
 printf '{"lat":37.5,"lon":-95,"span":4000}\n' > "$scratch/state.json"
-ruby - "$scratch" "$tex" <<'RUBY'
-require 'zlib'
-require 'fileutils'
-dir = ARGV.fetch(0)
-tex = ARGV.fetch(1)
+python3 - "$scratch" "$tex" <<'PY'
+import shutil, struct, sys, zlib
+dir, tex = sys.argv[1], sys.argv[2]
 # Each anchor must exist; a silent no-op would test unpatched sources.
-def patch(path, from, to)
-  text = File.read(path)
-  abort("#{path} changed: #{from.strip}") unless text.include?(from)
-  File.write(path, text.sub(from, to))
-end
-def chunk(kind, data)
-  [data.bytesize].pack('N') + kind + data + [Zlib.crc32(kind + data)].pack('N')
-end
+def patch(path, old, new):
+    text = open(path).read()
+    if old not in text:
+        sys.exit(f"{path} changed: {old.strip()}")
+    open(path, "w").write(text.replace(old, new, 1))
+def chunk(kind, data):
+    return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
 # 131072 exceeds the reference GPU's 16384 limit without a huge allocation.
 # The PNG remains tiny; Qt really downsizes its GPU upload in this test.
-{ 'native' => 7000, 'oversize' => 131072 }.each do |name, width|
-  header = [width, 1, 8, 6, 0, 0, 0].pack('NNC5')
-  pixels = "\x00".b + "\x01\x00\x00\xff".b * width
-  png = "\x89PNG\r\n\x1a\n".b + chunk('IHDR', header) + chunk('IDAT', Zlib.deflate(pixels)) + chunk('IEND', ''.b)
-  File.binwrite("#{tex}/#{name}.png", png)
-end
-%w[mismatch current reopened].each { |name| FileUtils.cp("#{tex}/native.png", "#{tex}/#{name}.png") }
-[['RadarWindow.qml', 'app', 'engine'], ['Popover.qml', 'card', 'connection']].each do |file, id, engine|
-  patch("#{dir}/ui/#{file}", "    id: #{id}\n", "    id: #{id}\n    property alias testEngine: #{engine}\n    property alias testMap: map\n    property alias testError: errorNotice\n")
-end
-patch("#{dir}/ui/RadarWindow.qml", "    id: app\n", "    id: app\n    property alias testSurface: surface\n")
-patch("#{dir}/ui/RadarMap.qml", "    id: map\n", "    id: map\n    property alias testCheck: textureCheck\n")
-engine = "#{dir}/ui/Engine.qml"
+for name, width in (("native", 7000), ("oversize", 131072)):
+    header = struct.pack(">IIBBBBB", width, 1, 8, 6, 0, 0, 0)
+    pixels = b"\x00" + b"\x01\x00\x00\xff" * width
+    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(pixels)) + chunk(b"IEND", b"")
+    open(f"{tex}/{name}.png", "wb").write(png)
+for name in ("mismatch", "current", "reopened"):
+    shutil.copy(f"{tex}/native.png", f"{tex}/{name}.png")
+for file, id, engine in (("RadarWindow.qml", "app", "engine"), ("Popover.qml", "card", "connection")):
+    patch(f"{dir}/ui/{file}", f"    id: {id}\n", f"    id: {id}\n    property alias testEngine: {engine}\n    property alias testMap: map\n    property alias testError: errorNotice\n")
+patch(f"{dir}/ui/RadarWindow.qml", "    id: app\n", "    id: app\n    property alias testSurface: surface\n")
+patch(f"{dir}/ui/RadarMap.qml", "    id: map\n", "    id: map\n    property alias testCheck: textureCheck\n")
+engine = f"{dir}/ui/Engine.qml"
 patch(engine, 'connected: true', 'connected: false')
 patch(engine, 'running: engine.socket && !engine.socket.connected && !engine.incompatible', 'running: false')
 patch(engine, '    function send(command) {', "    function send(command) {\n        return;")
-RUBY
+PY
 cp tests/texture-guard.qml "$scratch/ui/Check.qml"
 export OMASTORM_ROOT="$scratch/root" OMASTORM_CONFIG="$scratch/config.toml" OMASTORM_STATE="$scratch/state.json" OMASTORM_LOCATION=/dev/null
 export OMASTORM_REVIEW="$PWD/review"
