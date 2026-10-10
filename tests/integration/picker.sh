@@ -49,6 +49,11 @@ for _ in {1..50}; do [[ $(key field source) != mrms-conus && $(key field locked)
 key run mosaic
 for _ in {1..50}; do [[ $(key field source) == mrms-conus && $(key field locked) == true ]] && break; sleep .1; done
 expect 'Shift+N locks MRMS in place' 'mrms-conus true 37.5 -95' "$(key field source) $(key field locked) $(key field lat) $(key field lon)"
+key run mosaic
+for _ in {1..50}; do [[ $(key field source) != mrms-conus && $(key field locked) == false ]] && break; sleep .1; done
+[[ $(key field source) != mrms-conus && $(key field locked) == false ]] || fail "Shift+N again did not hand MRMS back to a station"
+key run mosaic
+for _ in {1..50}; do [[ $(key field source) == mrms-conus ]] && break; sleep .1; done
 call open opera
 m=$(call matches)
 [[ $m == *opera* ]] || fail "opera did not list the EUMETNET mosaic: $m"

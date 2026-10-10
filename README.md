@@ -78,11 +78,12 @@ combining the strongest radar returns at each location.
 
 Press `Shift+N` (or search **mrms** in the radar picker) for NOAA's
 quality-controlled base reflectivity mosaic across the contiguous U.S. It
-combines multiple radars and stays selected while you pan or zoom; `n` goes
-back to the nearest station. MRMS is an explicit choice; automatic selection
-continues to use NEXRAD or OPERA. Looping it uses noticeably more CPU than a
-single station. It shows the newest valid observation first, then fills up to
-one hour of playback using actual UTC observation times.
+combines multiple radars and stays selected while you pan or zoom; `Shift+N`
+again or `n` goes back to the nearest station. MRMS is an explicit choice;
+automatic selection continues to use NEXRAD or OPERA. Looping it uses
+noticeably more CPU than a single station. It shows the newest valid
+observation first, then fills up to one hour of playback using actual UTC
+observation times.
 
 For NEXRAD, Omastorm shows **reflectivity** on the lowest tilt: the beam that
 stays closest to the ground. OPERA combines multiple radars and elevations into one image.
@@ -234,7 +235,7 @@ Chrome follows the Omarchy theme. Radar color comes from the measured reflectivi
 | `0` | Reset to the configured or weather location |
 | `/` or `s` | Search |
 | `n` | Follow the covering radar (camera stays) |
-| `Shift+N` | All radars: the mosaic covering the map (camera stays) |
+| `Shift+N` | All radars: the mosaic covering the map, on or off (camera stays) |
 | `Shift+L` | Lock the radar |
 | `m` | My location |
 | Space | Loop from the selected frame / pause |

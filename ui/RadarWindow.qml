@@ -333,13 +333,13 @@ Item {
         if (!state || !s) return;
         store.followNearest(s.id);
     }
-    // Shift+N locks the mosaic covering the center, camera staying put; `n`
-    // hands back to the nearest station.
+    // Shift+N toggles like focus mode: lock the mosaic covering the center,
+    // camera staying put, or hand a mosaic back to the nearest station.
     function coveringMosaic() {
         if (!state) return;
+        if (engine.source && engine.source.kind === "mosaic") { nearest(); return; }
         var m = Location.coveringMosaic(engine.sources, map.centerLat, map.centerLon);
         if (!m) { flashMap("No mosaic covers this area"); return; }
-        if (engine.source && engine.source.id === m.id) return;
         store.setLock(Location.mosaicLock(m.id), true);
     }
     function locateMe() {

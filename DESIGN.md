@@ -160,7 +160,7 @@ covers the center; leaving its coverage bypasses hysteresis. Cross-family and
 grid selection follow [docs/grid-adapters.md](docs/grid-adapters.md). Lock pins
 one exact dish or mosaic; `n` releases it and selects from the center without
 moving the camera. `Shift+N` locks the mosaic covering the center, also without
-moving the camera. Choosing a station in search (or from the station title)
+moving the camera, and on a mosaic acts as `n`. Choosing a station in search (or from the station title)
 locks it and centres the map on that site. Live mosaic sources appear in that
 same radar list — covering mosaics on an empty browse, and by id or name when
 typed — and choosing one locks that mosaic and centres on its coverage. They
