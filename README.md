@@ -59,10 +59,9 @@ you left off.
 
 ## Coverage
 
-U.S. radar comes from NOAA NEXRAD, with a NOAA MRMS mosaic available for
-the contiguous U.S. through the radar picker. European radar comes from
-EUMETNET OPERA. Coverage depends on radar range and the data available from each
-provider. Some areas have no radar data, even when their cities appear in
+U.S. radar comes from NOAA NEXRAD, and `Shift+N` switches to the NOAA MRMS
+mosaic for the contiguous U.S. European radar comes from EUMETNET OPERA.
+Coverage depends on radar range and the data available from each provider. Some areas have no radar data, even when their cities appear in
 search.
 
 [![EUMETNET OPERA radar mosaic over Warsaw, Poland](docs/media/readme/omastorm-europe.png)](https://github.com/wesleygrimes/omastorm/releases/download/v0.1.14/omastorm-europe.mp4)
@@ -76,14 +75,10 @@ individual radar volumes: each dish spins, sends a pulse, and measures how
 much bounced back. In Europe, EUMETNET OPERA provides a mosaic
 combining the strongest radar returns at each location.
 
-Press `Shift+N` (or search **mrms** in the radar picker) for NOAA's
-quality-controlled base reflectivity mosaic across the contiguous U.S. It
-combines multiple radars and stays selected while you pan or zoom; `Shift+N`
-again or `n` goes back to the nearest station. MRMS is an explicit choice;
-automatic selection continues to use NEXRAD or OPERA. Looping it uses
-noticeably more CPU than a single station. It shows the newest valid
-observation first, then fills up to one hour of playback using actual UTC
-observation times.
+Press `Shift+N` for NOAA's MRMS mosaic: every U.S. radar merged into one
+image, covering the contiguous U.S. Press it again, or `n`, to go back to the
+nearest station. You can also search **mrms**. It never turns on by itself,
+and looping its hour of history uses more CPU than a single station.
 
 For NEXRAD, Omastorm shows **reflectivity** on the lowest tilt: the beam that
 stays closest to the ground. OPERA combines multiple radars and elevations into one image.
@@ -201,11 +196,9 @@ slower in clear air). While a volume is in progress the engine reads live
 chunks, so the sweep can paint as the antenna turns. If no new chunk arrives
 for 90 seconds it rediscovers the latest volume; cached frames stay. OPERA
 polls its public 24-hour cache and loads complete mosaic frames.
-MRMS polls the public NOAA S3 feed every 30 seconds while selected. If the
-feed fails, the available loop stays playable with the existing status and
-age indication. Its hour stays anchored to the newest accepted observation;
-gaps are skipped, and new frames resume the same selection. MRMS has no
-METAR overlay or weak-return filtering.
+MRMS checks for new data every 30 seconds while selected. If the feed drops,
+the loop you have keeps playing. There's no METAR overlay or weak-return
+filtering on MRMS.
 
 ## Look
 
